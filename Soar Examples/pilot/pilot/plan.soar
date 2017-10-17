@@ -1,0 +1,23 @@
+sp {pilot*propose*plan
+   (state <s> ^PlanRoute true)
+   
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name plan)
+}
+
+
+
+sp {pilot*apply*plan
+   (state <s> ^operator <o>)
+   (<o> ^name plan)
+-->
+    (<s> ^FilePlan true
+         ^PlanRoute false
+         ^PlanRoute true -
+         ^Distance (rand-int 100 600)
+         ^Distance <d>
+         ^DistanceToNextWaypoint 80
+         ^DistanceToNextWaypoint <n>
+         ^WaypointNumber (/ <d> <n>))
+}

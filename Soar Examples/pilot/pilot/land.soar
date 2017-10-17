@@ -1,0 +1,17 @@
+sp  {pilot*propose*land
+    (state <s> ^operator <o>
+               ^Launched true)
+    (<s> ^WaypointNumber 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name land)
+}
+
+
+
+sp {pilot*apply*land
+   (state <s> ^operator <o>)
+   (<o> ^name land)
+-->
+    (<s> ^ReachedFinalDestination true)
+}

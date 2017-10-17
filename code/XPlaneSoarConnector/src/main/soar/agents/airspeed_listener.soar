@@ -1,0 +1,13 @@
+sp {gratos*elaborate*flightdata
+(state <s> ^flightdata <fd>)
+-->
+(<s> ^flightdata <fd>)
+}
+
+sp {gratos*propose*bl
+(state <s> ^flightdata <fd>)
+(<fd> ^airspeed >= 200)
+-->
+(write (crlf) |ROTATE!!|)
+}
+

@@ -1,0 +1,13 @@
+VERSION 4
+/counter/counter.dm
+0	ROOT counter counter 1
+1	0	FOPERATOR _firstload _firstload.soar 2
+2	0	FOLDER all all 3
+3	0	FOLDER elaborations elaborations 4
+4	3	FOPERATOR _all _all.soar 5
+5	3	FOPERATOR goal-test goal-test.soar 6
+6	3	FOPERATOR monitoring monitoring.soar 7
+7	3	FOPERATOR top-state top-state.soar 8
+8	0	OPERATOR increment increment.soar 9
+9	0	OPERATOR initialize-counter initialize-counter.soar 10
+END

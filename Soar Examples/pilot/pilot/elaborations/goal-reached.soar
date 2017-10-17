@@ -1,0 +1,7 @@
+sp  {detect-goal
+    (state <s> ^operator <o>)
+    (<s> ^ReachedFinalDestination true)
+-->
+    (write (crlf) | The pilot has landed.|)
+    (halt)
+}

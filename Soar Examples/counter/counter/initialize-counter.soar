@@ -1,0 +1,16 @@
+sp {counter*propose*initialize-counter
+   (state <s> ^superstate nil
+             -^name)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name initialize-counter)
+}
+
+sp {counter*apply*initialize-counter
+   (state <s> ^operator <op>)
+   (<op> ^name initialize-counter)
+-->
+   (<s> ^name counter
+        ^num 2)
+}
+

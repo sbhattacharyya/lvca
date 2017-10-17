@@ -1,0 +1,156 @@
+# Initialize the agent
+sp { proposeInitialize (state <s> ^type state -^name ^superstate nil)
+-->
+ (<s> ^operator <o> +)(<o> ^name initialize) }
+
+sp { applyInitialize (state <s>  ^operator <o>)(<o> ^name initialize) (<s> ^io.output-link <l>)
+-->
+ (<s> ^name takeoff ^last-action nothing ^wait-flag 1) (<l> ^spoken |Starting...|) }
+
+
+
+
+# Call "Airspeed alive" when speed is greater than 80 kts
+sp { proposeCallAA (state <s> ^name takeoff ^io.input-link.flightdata <fd> ^last-action nothing) (<fd> ^airspeed > 80)
+-->
+ (<s> ^operator <o> +)(<o> ^name callaa) }
+
+sp { callaa (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callaa) (<s> ^io.output-link <k>)
+-->
+ (<s> ^last-action <l> -)(<s> ^last-action callaa) (<k> ^spoken |Airspeed Alive|) }
+
+
+
+
+# Call "V1" when speed is greater than 130 knots indicating a commitment to takeoff
+sp { proposeCallV1 (state <s> ^name takeoff ^io.input-link.flightdata <fd> ^last-action callaa) (<fd> ^airspeed > 130)
+-->
+ (<s> ^operator <o> +)(<o> ^name callv1) }
+
+sp { callv1 (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callv1) (<s> ^io.output-link <l>)
+-->
+ (<s> ^last-action <l> -)(<s> ^last-action callv1) (<l> ^spoken |V1|) }
+
+
+
+
+# Call "Rotate" when speed is greater than 140, indicating the point at which the pilot pulls back on the yoke
+sp { proposeCallRotate (state <s> ^name takeoff ^io.input-link.flightdata <fd> ^last-action callv1) (<fd> ^airspeed > 140)
+-->
+ (<s> ^operator <o> +)(<o> ^name callrotate) }
+
+sp { callrotate (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callrotate) (<s> ^io.output-link <l>)
+-->
+ (<s> ^last-action <l> -)(<s> ^last-action callrotate) (<l> ^spoken |rotate|) }
+
+
+
+
+# No operators to choose from, perform no-op
+sp { proposewait (state <s> ^name takeoff ^wait-flag <w>)
+-->
+ (<s> ^operator <o> + <)(<o> ^name Processing_Data) }
+
+sp { applywait (state <s> ^name takeoff ^operator <o> ^wait-flag <w>) (<o> ^name Processing_Data)
+-->
+ (<s> ^wait-flag (- <w>))(<s> ^wait-flag <w> -) }
+
+
+
+
+# Reset once planes stops
+sp { proposeClearCalls (state <s> -^abandon ^name takeoff ^last-action <> nothing ^io.input-link.flightdata <fd>) (<fd> ^airspeed = 0)
+-->
+ (<s> ^operator <o> +)(<o> ^name clearcalls) }
+
+sp { clearcalls (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name clearcalls)
+-->
+ (<s> ^last-action <l> -)(<s> ^last-action nothing) }
+
+
+
+
+## GROUND ABANDON
+# Enter an abandon state if we have not committed to takeoff and something goes wrong, beginning calling instructions
+sp { proposeAbandon (state <s> ^name takeoff ^io.input-link.flightdata <fd>) (<fd> ^airspeed > 0 ^airspeed < 130 ^allEnginesOK false) (<s> ^last-action <> abandon)
+-->
+ (<s> ^operator <o> + >) (<o> ^name abandon) }
+
+sp { callAbandon (state <s> ^name takeoff ^operator <o> ^last-action <l> ) (<o> ^name abandon) (<s> ^io.output-link <l>)
+-->
+ (<s> ^last-action <l> - ^last-action abandon ^next-check wheelbrakes ^abandon true) (<l> ^spoken |Abandon Takeoff|) }
+
+
+
+# Propose skipping these calls if the corresponding instructions have been followed
+sp { propose*skip*WheelBrakes     (state <s> ^abandon true ^next-check wheelbrakes ^io.input-link.flightdata <fd>) (<fd> ^wheelbrakesON true) (<fd> ^wheelbrakesON <v>)
+-->
+ (<s> ^operator <o> +) (<o> ^name skip-wheelbrakes) }
+
+sp { propose*skip*AirBrakes       (state <s> ^abandon true ^next-check airbrakes   ^io.input-link.flightdata <fd>) (<fd> ^airbrakesON true)   (<fd> ^wheelbrakesON <v>)
+-->
+ (<s> ^operator <o> +) (<o> ^name skip-airbrakes) }
+
+sp { propose*skip*Reversers       (state <s> ^abandon true ^next-check reversers   ^io.input-link.flightdata <fd>) (<fd> ^reversersON true)   (<fd> ^wheelbrakesON <v>)
+-->
+ (<s> ^operator <o> +) (<o> ^name skip-reversers)   }
+
+
+
+
+# Propose announcing these if the instruction has not been followed yet
+sp { propose*announce*WheelBrakes (state <s> ^abandon true ^next-check wheelbrakes ^io.input-link.flightdata <fd>) (<fd> ^wheelbrakesON false) (<fd> ^wheelbrakesON <v>)
+-->
+ (<s> ^operator <o> + >) (<o> ^name call-wheelbrakes) }
+
+sp { propose*announce*AirBrakes   (state <s> ^abandon true ^next-check airbrakes   ^io.input-link.flightdata <fd>) (<fd> ^airbrakesON false)  (<fd> ^wheelbrakesON <v>)
+-->
+ (<s> ^operator <o> + >) (<o> ^name call-airbrakes)   }
+
+sp { propose*announce*Reversers   (state <s> ^abandon true ^next-check reversers   ^io.input-link.flightdata <fd>) (<fd> ^reversersON false)  (<fd> ^wheelbrakesON <v>)
+-->
+ (<s> ^operator <o> + >) (<o> ^name call-reversers)   }
+
+
+
+
+# Apply the operators
+sp { apply*skip*WheelBrakes       (state <s> ^operator <o> ^next-check <n>) (<o> ^name skip-wheelbrakes)
+-->
+ (<s> ^next-check <n> -)(<s> ^next-check airbrakes) }
+
+sp { apply*skip*AirBrakes         (state <s> ^operator <o> ^next-check <n>) (<o> ^name skip-airbrakes)
+-->
+ (<s> ^next-check <n> -)(<s> ^next-check reversers) }
+
+sp { apply*skip*Reversers         (state <s> ^operator <o> ^next-check <n>) (<o> ^name skip-reversers)
+-->
+ (<s> ^next-check <n> -)(<s> ^next-check wheelbrakes) }
+
+
+
+# Make announcements
+sp { apply*announce*WheelBrakes   (state <s> ^operator <o> ^next-check <n>) (<o> ^name call-wheelbrakes) (<s> ^io.output-link <l>)
+-->
+ (<s> ^next-check <n> -)(<s> ^next-check airbrakes)   (<l> ^spoken |use wheelbrakes|) }
+
+sp { apply*announce*AirBrakes     (state <s> ^operator <o> ^next-check <n>) (<o> ^name call-airbrakes) (<s> ^io.output-link <l>)
+-->
+ (<s> ^next-check <n> -)(<s> ^next-check reversers)   (<l> ^spoken |use airbrakes|) }
+
+sp { apply*announce*Reversers     (state <s> ^operator <o> ^next-check <n>) (<o> ^name call-reversers) (<s> ^io.output-link <l>)
+-->
+ (<s> ^next-check <n> -)(<s> ^next-check wheelbrakes) (<l> ^spoken |use reverse thrust|) }
+
+
+
+
+
+# Exit abandon state once plane stops
+sp { plane*stopped   (state <s> ^abandon true ^io.input-link.flightdata <fd>) (<fd> ^airspeed = 0)
+-->
+ (<s> ^operator <o> + >) (<o> ^name stop-abandon) }
+
+sp { apply*stop*calls   (state <s> ^operator <o> ^abandon <a> ^last-action <l>) (<o> ^name stop-abandon)
+-->
+ (<s> ^abandon <a> - ^last-action <l> - ^last-action make-calls) }

@@ -1,0 +1,25 @@
+sp  {pilot*propose*navigate
+    (state <s> ^operator <o>
+               ^Launched true
+               ^ReachedNextWaypoint true
+               ^ReachedFinalDestination false
+               ^WaypointNumber > 0
+               ^WaypointNumber <n>
+               ^RefuelNeeded 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name navigate)
+}
+
+
+
+sp {pilot*apply*navigate
+   (state <s> ^operator <o>
+              ^WaypointNumber <n>)
+   (<o> ^name navigate)
+-->
+    (<s> ^CheckFuel false
+         ^ReachedNextWaypoint false
+         ^WaypointNumber (- <n> 1)
+         ^WaypointNumber <n> -)
+}

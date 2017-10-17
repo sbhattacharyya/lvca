@@ -1,0 +1,43 @@
+sp {counter*propose*initialize-counter
+   (state <s> ^superstate nil
+             -^name)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name initialize-counter)
+}
+
+sp {counter*apply*initialize-counter
+   (state <s> ^operator <op>)
+   (<op> ^name initialize-counter)
+-->
+   (<s> ^name counter
+        ^num 2)
+}
+
+sp {counter*propose*increment
+   (state <s> ^name counter
+              ^num <c>)
+-->
+   (<s> ^operator <op> + =)
+   (<op> ^name increment
+         ^first <c>)
+}
+
+sp {counter*apply*increment
+   (state <s> ^name counter
+              ^operator <op>
+              ^num <c>)
+   (<op> ^name increment
+         ^first <c>)
+-->
+   (<s> ^num (+ <c> 1)
+        ^num <c> -)
+}
+
+sp {counter*detect*goal*achieved
+   (state <s> ^name counter
+              ^num 7)
+-->
+   (write (crlf) | The number 7 has been reached.|)
+   (halt)
+}

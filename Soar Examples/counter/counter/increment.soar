@@ -1,0 +1,19 @@
+sp {counter*propose*increment
+   (state <s> ^name counter
+              ^num <c>)
+-->
+   (<s> ^operator <op> + =)
+   (<op> ^name increment
+         ^first <c>)
+}
+
+sp {counter*apply*increment
+   (state <s> ^name counter
+              ^operator <op>
+              ^num <c>)
+   (<op> ^name increment
+         ^first <c>)
+-->
+   (<s> ^num (+ <c> 1)
+        ^num <c> -)
+}

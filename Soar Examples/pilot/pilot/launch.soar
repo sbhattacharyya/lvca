@@ -1,0 +1,25 @@
+sp  {pilot*propose*launch
+    (state <s> ^PlanRouteDone true
+               ^operator <o>)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name launch)
+}
+
+
+
+sp {pilot*apply*launch
+   (state <s> ^operator <o>
+              ^DistanceToNextWaypoint <d>)
+   (<o> ^name launch)
+-->
+    (<s> ^Launched true
+         ^PlanRouteDone false
+         ^Speed 20
+         ^Speed <v>
+         ^TimeToNextWaypoint (/ <d> <v>)
+         ^ReachedNextWaypoint false
+         ^RefuelNeeded 0
+         ^Time 0
+         ^ReachedFinalDestination false)
+}

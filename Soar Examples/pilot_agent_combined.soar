@@ -1,0 +1,200 @@
+
+
+sp  {pilot*propose*file
+    (state <s> ^FilePlan true)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name file)
+}
+
+
+sp {pilot*apply*file
+   (state <s> ^operator <o>)
+   (<o> ^name file)
+-->
+    (<s> ^PlanRouteDone true
+         ^FilePlan false
+         ^FilePlan true -)
+}
+
+
+sp  {pilot*propose*initialize-pilot
+    (state <s> ^superstate nil
+              -^PlanRoute)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name initialize-pilot)
+}
+
+
+
+sp {pilot*apply*initialize-pilot
+   (state <s> ^operator <o>)
+   (<o> ^name initialize-pilot)
+-->
+   (<s> ^PlanRoute true)
+}
+
+
+sp  {pilot*propose*land
+    (state <s> ^operator <o>
+               ^Launched true)
+    (<o> ^WaypointNumber 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name land)
+}
+
+
+sp {pilot*apply*land
+   (state <s> ^operator <o>)
+   (<o> ^name land)
+-->
+    (<s> ^ReachedFinalDestination true)
+}
+
+sp  {pilot*propose*launch
+    (state <s> ^PlanRouteDone true
+               ^operator <o>)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name launch)
+}
+
+
+sp {pilot*apply*launch
+   (state <s> ^operator <o>
+              ^DistanceToNextWaypoint <d>
+              ^Speed <v>)
+   (<o> ^name launch)
+-->
+    (<s> ^Launched true
+         ^PlanRouteDone false
+         ^Speed 20
+         ^TimeToNextWaypoint (/ <d> <v>)
+         ^ReachedNextWaypoint false
+         ^RefuelNeeded 0
+         ^Time 0
+         ^ReachedFinalDestination false)
+}
+
+
+sp  {pilot*propose*navigate
+    (state <s> ^operator <o>
+               ^Launched true
+               ^ReachedNextWaypoint true
+               ^ReachedFinalDestination false
+               ^WaypointNumber > 0
+               ^WaypointNumber <n>
+               ^RefuelNeeded 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name navigate)
+}
+
+
+sp {pilot*apply*navigate
+   (state <s> ^operator <o>
+              ^WaypointNumber <n>)
+   (<o> ^name navigate)
+-->
+    (<s> ^CheckFuel false
+         ^ReachedNextWaypoint false
+         ^WaypointNumber (- <n> 1)
+         ^WaypointNumber <n> -)
+}
+
+sp  {pilot*propose*navigate-to-waypoint
+    (state <s> ^Launched true
+               ^operator <o>
+               ^ReachedNextWaypoint false
+               ^RefuelNeeded 0
+               ^TimeToNextWaypoint <t>
+               ^Time < <t>)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name navigate-to-waypoint)
+}
+
+
+sp {pilot*apply*navigate-to-waypoint
+   (state <s> ^operator <o>
+              ^Time <t>)
+   (<o> ^name navigate-to-waypoint)
+-->
+    (<s> ^Time (+ <t> 1)
+         ^Time <t> -
+         ^CheckFuel false)
+}
+
+sp {pilot*propose*plan
+   (state <s> ^PlanRoute true)
+   
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name plan)
+}
+
+
+sp {pilot*apply*plan
+   (state <s> ^operator <o>)
+   (<o> ^name plan)
+-->
+    (<s> ^FilePlan true
+         ^PlanRoute false
+         ^PlanRoute true -
+         ^Distance (rand-int 100 600)
+         ^Distance <d>
+         ^DistanceToNextWaypoint 80
+         ^DistanceToNextWaypoint <n>
+         ^WaypointNumber (/ <d> <n>))
+}
+
+
+sp  {pilot*propose*refuel
+    (state <s> ^operator <o>)
+    (<s> ^RefuelNeeded 1)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name refuel)
+}
+
+
+sp {pilot*apply*refuel
+   (state <s> ^operator <o>)
+   (<o> ^name refuel)
+-->
+    (<s> ^RefuelNeeded 0)
+}
+
+
+sp  {pilot*fuel-check
+    (state <s> ^operator <o>)
+    (<s> ^CheckFuel true
+         ^ReachedFinalDestination false
+         ^WaypointNumber > 0)
+-->
+    (<s> ^CheckFuel false
+         ^RefuelNeeded (rand-int 0 1)
+         ^Time 0)
+}
+
+sp  {detect-goal
+    (state <s> ^operator <o>)
+    (<s> ^ReachedFinalDestination true)
+-->
+    (write (crlf) | The pilot has landed.|)
+    (halt)
+}
+
+sp  {check*waypoint-reached
+    (state <s> ^operator <o>)
+    (<s> ^Time > 0
+         ^Time <t>
+         ^TimeToNextWaypoint == <t>
+         ^ReachedNextWaypoint false
+         ^CheckFuel false)
+-->
+    (<s> ^ReachedNextWaypoint true
+         ^ReachedNextWaypoint false -)
+}

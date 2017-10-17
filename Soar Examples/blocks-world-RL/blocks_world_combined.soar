@@ -1,0 +1,311 @@
+###
+### Initialize the state
+###
+
+sp {blocks-world*propose*initialize-blocks-world
+   (state <s> ^superstate nil
+             -^name)
+-->
+   (<s> ^operator <o>)
+   (<o> ^name initialize-blocks-world)
+}
+
+## Modify the following rule to change the initial state or the goal.
+## It is necessary for the initial state and the desired state to share the same
+## identifiers for the objects (<blockA>, <blockB>, <blockC>, <table>) because of
+## the way the goal is detected (in elaborations/detect-success).
+
+sp {blocks-world*apply*initialize
+   (state <s> ^operator.name initialize-blocks-world)
+-->
+   (<s> ^name blocks-world
+        ^ontop <ontop1> <ontop2> <ontop3>
+        ^object <blockA> <blockB> <blockC> <table>
+        ^desired <ds>)
+   (<ontop1> ^top-block <blockC>
+             ^bottom-block <blockA>)
+   (<ontop2> ^top-block <blockA>
+             ^bottom-block <table>)
+   (<ontop3> ^top-block <blockB>
+             ^bottom-block <table>)
+   (<blockA> ^name A ^type block)
+   (<blockB> ^name B ^type block)
+   (<blockC> ^name C ^type block)
+   (<table> ^name table ^type table)
+   (write (crlf) |Simple Blocks World - just move blocks.|)
+   (write (crlf) |Initial state has C on A, A on table, and B on the table.|)
+   (<ds> ^ontop <dontop1> <dontop2> <dontop3>)
+   (<dontop1> ^top-block <blockA>
+              ^bottom-block <blockB>)
+   (<dontop2> ^top-block <blockB>
+              ^bottom-block <blockC>)
+   (<dontop3> ^top-block <blockC>
+              ^bottom-block <table>)
+   (write (crlf) |The goal is to get A on B on C on the table.|)}
+#
+
+# sp {blocks-world*apply*initialize
+#    (state <s> ^operator.name initialize-blocks-world)
+# -->
+#    (<s> ^name blocks-world
+#        ^ontop <ontop1> <ontop2> <ontop3> <ontop4>
+#        ^object <blockA> <blockB> <blockC> <blockD> <table>
+#        ^desired <ds>)
+#   (<ontop1> ^top-block <blockC>
+#             ^bottom-block <blockA>)
+#   (<ontop2> ^top-block <blockA>
+#             ^bottom-block <table>)
+#   (<ontop3> ^top-block <blockB>
+#             ^bottom-block <blockD>)
+#   (<ontop4> ^top-block <blockD>
+#             ^bottom-block <table>)
+#   (<blockA> ^name A ^type block)
+#   (<blockB> ^name B ^type block)
+#   (<blockC> ^name C ^type block)
+#   (<blockD> ^name D ^type block)
+#   (<table> ^name table ^type table)
+#   (write (crlf) |Four Blocks World - just move blocks.|)
+#   (write (crlf) |Initial state has A on table, B on D, C on A, D on the table.|)
+#   (<ds> ^ontop <dontop1> <dontop2> <dontop3> <dontop4>)
+#   (<dontop1> ^top-block <blockA>
+#              ^bottom-block <blockB>)
+#   (<dontop2> ^top-block <blockB>
+#              ^bottom-block <blockC>)
+#   (<dontop3> ^top-block <blockC>
+#              ^bottom-block <blockD>)
+#   (<dontop4> ^top-block <blockD>
+#              ^bottom-block <table>)
+#   (write (crlf) |The goal is to get A on B on C on D on the table.|)}
+#
+#
+
+###
+### MOVE-BLOCK
+###
+
+# Propose moving a clear block ontop a clear object
+
+sp {P5*propose*move-block
+   (state <s> ^name blocks-world)
+   (<s> ^clear <blockA>
+        ^clear { <> <blockA> <object> })
+   (<blockA> ^type block)
+  -{(<s> ^ontop <ontop>)
+    (<ontop> ^top-block <blockA>
+             ^bottom-block <object>)}
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name move-block
+        ^moving-block <blockA>
+        ^destination <object>)}
+
+sp {P10*apply*move-block*internal
+   (state <s> ^operator <o>
+              ^ontop <ontop>)
+   (<ontop> ^top-block <mblock>
+            ^bottom-block { <> <tblock> <object> })
+   (<o> ^moving-block <mblock>
+        ^destination <tblock>)
+-->
+   (<ontop> ^bottom-block <tblock>
+            ^bottom-block <object> -)}
+
+# If an blcok does not have another block ontop of it, it is clear.
+
+sp {P1*elaborate*block*clear
+   (state <s> ^name blocks-world
+              ^object <block>
+             -^ontop.bottom-block <block>)
+-->
+   (<s> ^clear <block>)
+}
+
+# Table is always clear
+
+sp {P2*elaborate*table*clear
+   (state <s> ^name blocks-world
+              ^object <object>)
+   (<object> ^type table)
+-->
+   (<s> ^clear <object>)
+}
+
+sp {P3*elaborate*object-on-table
+   (state <s> ^name blocks-world
+              ^object <table>)
+   (<table> ^name table)
+-->
+   (<s> ^inplace-object <table>)}
+
+sp {P4*elaborate*object-on-inplace
+   (state <s> ^name blocks-world
+              ^desired.ontop <ontop-d>
+              ^inplace-object <blockB>
+              ^ontop <ontop-s>)
+   (<ontop-d> ^top-block <blockA>
+              ^bottom-block <blockB>)
+   (<ontop-s> ^top-block <blockA>
+              ^bottom-block <blockB>)
+-->
+   (<s> ^inplace-object <blockA>)}
+
+
+sp {blocks-world*monitor*operator-application*move-block
+   (state <s> ^name blocks-world
+              ^operator <o>)
+   (<o> ^name move-block
+        ^moving-block.name <mob-name>
+        ^destination.name <dob-name>)
+-->
+   (write (crlf)
+          |  APPLYING | <o>
+          |: move-block(| <mob-name>
+          |,| <dob-name>
+          |)|)}
+
+
+
+
+### Detect Goal Achievement
+###  Add in reward calculations of 1 for goal achievement
+#
+sp {P11*all-blocks-in-desired-position
+   (state <s> ^name blocks-world
+              ^reward-link <r>
+              ^inplace-object.name A
+              ^inplace-object.name B
+              ^inplace-object.name C)
+-->
+   (<r> ^reward.value 1)}
+##
+
+#sp {P11*halt*all-blocks-in-desired-position*four-blocks
+#   (state <s>  ^name blocks-world
+#               ^reward-link <r>
+#               ^inplace-object.name A
+#               ^inplace-object.name B
+#               ^inplace-object.name C
+#               ^inplace-object.name D)
+#-->
+#   (<r> ^reward.value 1)}
+
+
+#sp {P11*halt*all-blocks-in-desired-position*five-blocks
+#   (state <s>  ^name blocks-world
+#               ^reward-link <r>
+#               ^inplace-object.name A
+#               ^inplace-object.name B
+#               ^inplace-object.name C
+#               ^inplace-object.name D
+#               ^inplace-object.name E)
+#-->
+#   (<r> ^reward.value 1)}
+
+### Need to have at least one elaboration cycle
+### between when reward is given and when Soar halts.
+
+sp {halt
+   (state <s> ^name blocks-world
+              ^reward-link.reward.value 1)
+-->
+   (write (crlf) |TASK: Finished Stacking the Blocks.|)
+   (halt)}
+
+## Provide partial reward for in-place-object
+##  In for experimentation.
+##  This does not necessarily help
+#sp {P11*one-block-in-desired-position
+#   (state <s> ^name blocks-world
+#              ^reward-link <r>
+#              ^inplace-object)
+#-->
+#   (<r> ^reward.value .02)}
+
+
+## Use GP to generate RL rules for all of the different states.
+## Initialized to 0
+## Generates 324 rules
+#
+#gp {blocks-world*RL*select*operator*three-blocks
+#   (state <s> ^name blocks-world
+#              ^ontop <ontop1> { <> <ontop1> <ontop2> } { <> <ontop2> <> <ontop1> <ontop3> }
+#              ^operator <o> +)
+#   (<ontop1> ^top-block.name A
+#             ^bottom-block.name [ B C table ])
+#   (<ontop2> ^top-block.name B
+#             ^bottom-block.name [ A C table ])
+#   (<ontop3> ^top-block.name C
+#             ^bottom-block.name [ A B table ])
+#   (<o> ^name move-block
+#        ^moving-block.name [ A B C]
+#        ^destination.name [ A B C table ])
+#-->
+#   (<s> ^operator <o> = 0.0)}
+
+### Use Templates, which generate the rules dynamically as needed
+
+sp {blocks-world*select*three-blocks
+   :template
+   (state <s> ^name blocks-world
+              ^ontop <ontop1> { <> <ontop1> <ontop2> } {<> <ontop2> <> <ontop1> <ontop3> }
+              ^operator <o> +)
+   (<ontop1> ^top-block.name A
+             ^bottom-block.name <A>)
+   (<ontop2> ^top-block.name B
+             ^bottom-block.name <B>)
+   (<ontop3> ^top-block.name C
+             ^bottom-block.name <C>)
+   (<o> ^name move-block
+        ^moving-block.name <F>
+        ^destination.name <G>)
+-->
+   (<s> ^operator <o> = 0)}
+
+
+
+### For four blocks
+## Generates around 5120 rules
+#gp {blocks-world*RL*select*operator*four-blocks
+#   (state <s> ^name blocks-world
+#              ^ontop <ontop1>
+#                     { <> <ontop1> <ontop2> }
+#                     { <> <ontop2> <> <ontop1> <ontop3> }
+#                     { <> <ontop2> <> <ontop1> <> <ontop3> <ontop4> }
+#              ^operator <o> +)
+#   (<ontop1> ^top-block.name A
+#             ^bottom-block.name [ B C D table ])
+#   (<ontop2> ^top-block.name B
+#             ^bottom-block.name [ A C D table ])
+#   (<ontop3> ^top-block.name C
+#             ^bottom-block.name [ A B D table ])
+#   (<ontop4> ^top-block.name D
+#             ^bottom-block.name [ A B C table ])
+#   (<o> ^name move-block
+#        ^moving-block.name [ A B C D ]
+#        ^destination.name [ A B C D table ])
+#-->
+#   (<s> ^operator <o> = 0.0)}
+
+#
+# Generates ~800 rules
+#sp {blocks-world*select*four-blocks*move-block
+#   :template
+#   (state <s> ^name blocks-world
+#              ^ontop <ontop1>
+#                     { <> <ontop1> <ontop2> }
+#                     { <> <ontop2> <> <ontop1> <ontop3> }
+#                     { <> <ontop2> <> <ontop1> <> <ontop3> <ontop4> }
+#              ^operator <o> +)
+#   (<ontop1> ^top-block.name A
+#             ^bottom-block.name <A>)
+#   (<ontop2> ^top-block.name B
+#             ^bottom-block.name <B>)
+#   (<ontop3> ^top-block.name C
+#             ^bottom-block.name <C>)
+#   (<ontop4> ^top-block.name D
+#             ^bottom-block.name <D>)
+#   (<o> ^name move-block
+#        ^moving-block.name <F>
+#        ^destination.name <G>)
+#-->
+#   (<s> ^operator <o> = 0)}

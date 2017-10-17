@@ -1,0 +1,8 @@
+# Initialize the agent
+sp { proposeInitialize (state <s> ^type state -^name ^superstate nil)
+-->
+ (<s> ^operator <o> +)(<o> ^name initialize) }
+
+sp { applyInitialize (state <s>  ^operator <o>)(<o> ^name initialize)
+-->
+ (<s> ^name takeoff ^last-action nothing ^wait-flag 1 ^time |0|) (<s> ^io.output-link.test |Test output|)) }

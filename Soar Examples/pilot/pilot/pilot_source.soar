@@ -1,0 +1,15 @@
+source _firstload.soar
+pushd all
+source all_source.soar
+popd
+pushd elaborations
+source elaborations_source.soar
+popd
+source file.soar
+source initialize-pilot.soar
+source land.soar
+source launch.soar
+source navigate.soar
+source navigate-to-waypoint.soar
+source plan.soar
+source refuel.soar

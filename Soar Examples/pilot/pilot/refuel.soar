@@ -1,0 +1,16 @@
+sp  {pilot*propose*refuel
+    (state <s> ^operator <o>)
+    (<s> ^RefuelNeeded 1)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name refuel)
+}
+
+
+
+sp {pilot*apply*refuel
+   (state <s> ^operator <o>)
+   (<o> ^name refuel)
+-->
+    (<s> ^RefuelNeeded 0)
+}

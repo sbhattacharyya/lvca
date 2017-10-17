@@ -1,0 +1,11 @@
+sp  {check*waypoint-reached
+    (state <s> ^operator <o>)
+    (<s> ^Time > 0
+         ^Time <t>
+         ^TimeToNextWaypoint = <t>
+         ^ReachedNextWaypoint false
+         ^CheckFuel false)
+-->
+    (<s> ^ReachedNextWaypoint true
+         ^ReachedNextWaypoint false -)
+}

@@ -1,0 +1,10 @@
+sp  {pilot*fuel-check
+    (state <s> ^operator <o>)
+    (<s> ^CheckFuel true
+         ^ReachedFinalDestination false
+         ^WaypointNumber > 0)
+-->
+    (<s> ^CheckFuel false
+         ^RefuelNeeded (rand-int 0 1)
+         ^Time 0)
+}

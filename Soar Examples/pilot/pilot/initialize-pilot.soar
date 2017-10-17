@@ -1,0 +1,16 @@
+sp  {pilot*propose*initialize-pilot
+    (state <s> ^superstate nil
+              -^PlanRoute)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name initialize-pilot)
+}
+
+
+
+sp {pilot*apply*initialize-pilot
+   (state <s> ^operator <o>)
+   (<o> ^name initialize-pilot)
+-->
+   (<s> ^PlanRoute true)
+}

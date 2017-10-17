@@ -1,0 +1,5 @@
+sp {counter*monitor*state
+   (state <s> ^name counter
+              ^num <c>)
+-->
+   (write (crlf) | num:| <c> )}

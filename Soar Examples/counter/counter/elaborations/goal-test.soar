@@ -1,0 +1,7 @@
+sp {counter*detect*goal*achieved
+   (state <s> ^name counter
+              ^num 7)
+-->
+   (write (crlf) | The number 7 has been reached.|)
+   (halt)
+}

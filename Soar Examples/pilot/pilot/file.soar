@@ -1,0 +1,17 @@
+sp  {pilot*propose*file
+    (state <s> ^FilePlan true)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name file)
+}
+
+
+
+sp {pilot*apply*file
+   (state <s> ^operator <o>)
+   (<o> ^name file)
+-->
+    (<s> ^PlanRouteDone true
+         ^FilePlan false
+         ^FilePlan true -)
+}

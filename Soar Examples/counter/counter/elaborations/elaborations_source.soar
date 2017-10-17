@@ -1,0 +1,4 @@
+source _all.soar
+source goal-test.soar
+source monitoring.soar
+source top-state.soar

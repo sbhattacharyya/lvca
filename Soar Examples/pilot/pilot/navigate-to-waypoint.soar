@@ -1,0 +1,23 @@
+sp  {pilot*propose*navigate-to-waypoint
+    (state <s> ^Launched true
+               ^operator <o>
+               ^ReachedNextWaypoint false
+               ^RefuelNeeded 0
+               ^TimeToNextWaypoint <t>
+               ^Time < <t>)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name navigate-to-waypoint)
+}
+
+
+
+sp {pilot*apply*navigate-to-waypoint
+   (state <s> ^operator <o>
+              ^Time <t>)
+   (<o> ^name navigate-to-waypoint)
+-->
+    (<s> ^Time (+ <t> 1)
+         ^Time <t> -
+         ^CheckFuel false)
+}
