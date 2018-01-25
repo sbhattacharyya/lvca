@@ -1,1 +1,2 @@
-# lvca
+# LVCA
+## Lightweight Verifiable Cognitive Architecture
