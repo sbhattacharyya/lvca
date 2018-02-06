@@ -3,7 +3,9 @@ package us.hiai.agents.CopilotTakeoff;
 import org.jsoar.kernel.*;
 import org.jsoar.kernel.events.OutputEvent;
 import org.jsoar.kernel.io.InputBuilder;
+import org.jsoar.kernel.io.InputOutput;
 import org.jsoar.kernel.io.InputWme;
+import org.jsoar.kernel.io.OutputChange;
 import org.jsoar.kernel.io.quick.DefaultQMemory;
 import org.jsoar.kernel.io.quick.QMemory;
 import org.jsoar.kernel.io.quick.SoarQMemoryAdapter;
@@ -51,7 +53,7 @@ public class CopilotTakeoffAgent extends XPlaneAgent
 
     @Override
     public boolean runOnStartup() {
-        return false;
+        return true;
     }
 
     @Override
@@ -118,11 +120,10 @@ public class CopilotTakeoffAgent extends XPlaneAgent
                                 // Start new thread
                                 CopilotTakeoffAgent.this.speakWmes((OutputEvent) soarEvent);  // Say all WMEs with the "spoken" attribute
                             });
-
                 });
 
 
-        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(pushFlightData(), 0, 200, TimeUnit.MILLISECONDS);
+        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(pushFlightData(), 0, 150, TimeUnit.MILLISECONDS);
     }
 
     private void speakWmes(OutputEvent soarEvent)
@@ -136,11 +137,9 @@ public class CopilotTakeoffAgent extends XPlaneAgent
                 String txt = nextWME.getValue().asString().getValue();
                 speakText(txt);
 
-                QMemory outputMemory = DefaultQMemory.create(sagt.getInputOutput().getOutputLink());
-                SoarQMemoryAdapter.attach(sagt, outputMemory);
-                outputMemory.remove("spoken");
-                SoarQMemoryAdapter.attach(sagt, outputMemory);
-                System.out.println();
+                QMemory memory = DefaultQMemory.create();
+                SoarQMemoryAdapter adapter = SoarQMemoryAdapter.attach(sagt, memory);
+                memory.setString("io.output-link.spoken", "");
             }
         }
     }
@@ -150,6 +149,10 @@ public class CopilotTakeoffAgent extends XPlaneAgent
         return () ->
         {
             FlightData data = getFlightData();
+
+            System.out.println("\t\t\t\tSpeed: "+data.airspeed);
+
+
             InputWme bl = builder.getWme("as");
             bl.update(syms.createInteger(data.airspeed));
             InputWme lat = builder.getWme("lat");

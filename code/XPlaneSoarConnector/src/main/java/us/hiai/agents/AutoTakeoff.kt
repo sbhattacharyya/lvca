@@ -11,11 +11,12 @@ class AutoTakeoff : XPlaneAgent()
 {
     override fun name(): String = "AutoTakeOffAgent"
 
-    override fun runOnStartup(): Boolean = true
+    override fun runOnStartup(): Boolean = false
 
     override fun start()
     {
-        val xpc = XPlaneConnector.getInstance()
+        println("Starting AutoTakeOffAgent.")
+        val xpc = XPlaneConnector()
 
         val heading = Math.round(xpc.currentHeading()).toFloat()
 //        val lat = xpc.currentLatitude()

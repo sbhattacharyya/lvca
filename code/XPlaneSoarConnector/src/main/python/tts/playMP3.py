@@ -9,8 +9,8 @@ if len(sys.argv) == 2:
     pygame.init()
     mixer.music.set_endevent(1)
 
-    f = open(filename, 'w+b')
-    mixer.music.load(f)
+    #f = open(filename, 'w+b')
+    mixer.music.load(filename)
     mixer.music.play()
     pygame.event.wait()
-    f.close()
+#    f.close()

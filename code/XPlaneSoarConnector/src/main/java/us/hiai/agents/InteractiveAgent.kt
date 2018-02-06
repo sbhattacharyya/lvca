@@ -7,7 +7,7 @@ import us.hiai.xplane.XPlaneConnector
  */
 class InteractiveAgent : XPlaneAgent()
 {
-    val xpc = XPlaneConnector.getInstance()
+    val xpc = XPlaneConnector()
 
     override fun name(): String = "InteractiveAgent"
 

@@ -10,8 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class XPlaneConnector
 {
-    private AtomicReference<XPlaneConnect> xpc = null;
-    private static XPlaneConnector instance = null;
+    private static XPlaneConnect xpc = getConnection();
 
     private enum ControlSurface
     {
@@ -32,25 +31,34 @@ public class XPlaneConnector
         }
     }
 
-    public static XPlaneConnector getInstance()
+    public static XPlaneConnect getConnection()
     {
-        if (instance == null)
+        if (xpc == null)
         {
-            instance = new XPlaneConnector();
+            try
+            {
+                xpc = new XPlaneConnect();
+            }
+            catch (SocketException e)
+            {
+                e.printStackTrace();
+                System.exit(1);
+            }
         }
-        return instance;
+        return xpc;
     }
 
-    private XPlaneConnector()
+    private static XPlaneConnect refresh()
     {
         try
         {
-            xpc = new AtomicReference<>(new XPlaneConnect());
+            xpc = new XPlaneConnect();
         }
         catch (SocketException e)
         {
             e.printStackTrace();
         }
+        return xpc;
     }
 
     // ------------------ GET INFO ------------------------
@@ -82,13 +90,13 @@ public class XPlaneConnector
 
     // ------------------ CONTROL AIRPLANE -------------------
 
-    private void changeControlSurfacePositions(ControlSurface controlSurface, float value)
+    private static void changeControlSurfacePositions(ControlSurface controlSurface, float value)
     {
         try
         {
-            float[] positions = xpc.get().getCTRL(0);
+            float[] positions = xpc.getCTRL(0);
             positions[controlSurface.index] = value;
-            xpc.get().sendCTRL(positions);
+            xpc.sendCTRL(positions);
         }
         catch (IOException e)
         {
@@ -137,7 +145,7 @@ public class XPlaneConnector
     {
         try
         {
-            return xpc.get().getDREFs(strs);
+            return xpc.getDREFs(strs);
         }
         catch (IOException e)
         {
@@ -150,7 +158,7 @@ public class XPlaneConnector
     {
         try
         {
-            return xpc.get().getDREF(str)[0];
+            return xpc.getDREF(str)[0];
         }
         catch (IOException | IndexOutOfBoundsException | NegativeArraySizeException e)
         {
@@ -159,16 +167,16 @@ public class XPlaneConnector
         return 0.0f;
     }
 
-    private void failConcisely(Exception e, String extra)
+    private static void failConcisely(Exception e, String extra)
     {
         System.err.println(e.toString() + " " + extra);
     }
 
-    private void setValueOnSim(String s, float val)
+    private static void setValueOnSim(String s, float val)
     {
         try
         {
-            xpc.get().sendDREF(s, val);
+            xpc.sendDREF(s, val);
         }
         catch (IOException e)
         {
@@ -180,7 +188,7 @@ public class XPlaneConnector
     {
         try
         {
-            xpc.get().sendDREF(s, val);
+            xpc.sendDREF(s, val);
         }
         catch (IOException e)
         {
@@ -192,7 +200,7 @@ public class XPlaneConnector
     {
         try
         {
-            xpc.get().sendDREFs(strings, vals);
+            xpc.sendDREFs(strings, vals);
         }
         catch (IOException e)
         {
@@ -200,21 +208,18 @@ public class XPlaneConnector
         }
     }
 
-    public static FlightData getFlightData()
+    static float[][] values;
+    static float[][] engineStats;
+    static float[][] controlSurfaces;
+    static float[] reversers;
+    static float[] wheelBrakes;
+    static boolean enginesOK = true;
+    static boolean airBrakesON = false;
+    static boolean wheelBrakesON = false;
+    static boolean reverseON = false;
+
+    public static synchronized FlightData getFlightData()
     {
-        XPlaneConnect xpc = XPlaneConnector.getInstance().xpc.get();
-
-        float[][] values;
-        float[][] engineStats;
-        float[][] controlSurfaces;
-        float[] reversers;
-        float[] wheelBrakes;
-
-        boolean enginesOK = true;
-
-        boolean airBrakesON = false;
-        boolean wheelBrakesON = false;
-        boolean reverseON = false;
 
         try {
 
@@ -248,22 +253,16 @@ public class XPlaneConnector
             reverseON = reversers[0] != 0.0f;
             enginesOK = Arrays.deepEquals(engineStats, new float[][]{{0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}});
         }
-        catch (Throwable e) {
-            values = new float[1][4];
-            values[0][0] = (float) (Math.random() * 1000);
-            values[0][1] = 1000f;
-            values[0][2] = 28.1027500f;
-            values[0][3] = -80.6452500f;
+        catch (Throwable e)
+        {
+            System.err.println(e.getMessage());
+            xpc = XPlaneConnector.refresh();
         }
 
-        if ( values.length < 4)
-        {
-            values = new float[4][1];
-            values[0][0] = (float) (Math.random() * 1000);
-            values[1][0] = 1000f;
-            values[2][0] = 28.1027500f;
-            values[3][0] = -80.6452500f;
-        }
+//        if ( values.length < 4)
+//        {
+//            System.err.println("Somehow, values.length < 4");
+//        }
 
 
         return new FlightData((int) values[0][0], (int) values[1][0], values[2][0], values[3][0], enginesOK, wheelBrakesON, airBrakesON, reverseON);

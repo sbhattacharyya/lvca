@@ -49,9 +49,9 @@ sp { callrotate (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^n
 # No operators to choose from, perform no-op
 sp { proposewait (state <s> ^name takeoff ^wait-flag <w>)
 -->
- (<s> ^operator <o> + <)(<o> ^name Processing_Data) }
+ (<s> ^operator <o> + <)(<o> ^name Processing) }
 
-sp { applywait (state <s> ^name takeoff ^operator <o> ^wait-flag <w>) (<o> ^name Processing_Data)
+sp { applywait (state <s> ^name takeoff ^operator <o> ^wait-flag <w>) (<o> ^name Processing)
 -->
  (<s> ^wait-flag (- <w>))(<s> ^wait-flag <w> -) }
 
