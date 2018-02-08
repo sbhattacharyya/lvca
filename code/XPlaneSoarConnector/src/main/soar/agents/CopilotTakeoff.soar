@@ -27,9 +27,9 @@ sp { proposeCallV1 (state <s> ^name takeoff ^io.input-link.flightdata <fd> ^last
 -->
  (<s> ^operator <o> +)(<o> ^name callv1) }
 
-sp { callv1 (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callv1) (<s> ^io.output-link <l>)
+sp { callv1 (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callv1) (<s> ^io.output-link <k>)
 -->
- (<s> ^last-action <l> -)(<s> ^last-action callv1) (<l> ^spoken |V1|) }
+ (<s> ^last-action <l> -)(<s> ^last-action callv1) (<k> ^spoken |V1|) }
 
 
 
@@ -39,9 +39,9 @@ sp { proposeCallRotate (state <s> ^name takeoff ^io.input-link.flightdata <fd> ^
 -->
  (<s> ^operator <o> +)(<o> ^name callrotate) }
 
-sp { callrotate (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callrotate) (<s> ^io.output-link <l>)
+sp { callrotate (state <s> ^name takeoff ^operator <o> ^last-action <l>) (<o> ^name callrotate) (<s> ^io.output-link <k>)
 -->
- (<s> ^last-action <l> -)(<s> ^last-action callrotate) (<l> ^spoken |rotate|) }
+ (<s> ^last-action <l> -)(<s> ^last-action callrotate) (<k> ^spoken |rotate|) }
 
 
 
