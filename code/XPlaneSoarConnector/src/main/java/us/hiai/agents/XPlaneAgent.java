@@ -70,7 +70,7 @@ public abstract class XPlaneAgent implements AutoCloseable, Runnable
         String pathToTTS = "src/main/python/tts/generateMP3.py".replace("/", File.separator);
         new ProcessBuilder("python", pathToTTS, text, audioFile)
                 .inheritIO()
-                .redirectError(ProcessBuilder.Redirect.PIPE).start();
+                .start();
     }
 
 
@@ -79,7 +79,7 @@ public abstract class XPlaneAgent implements AutoCloseable, Runnable
         String pathToTTS = "src/main/python/tts/playMP3.py".replace("/", File.separator);
         new ProcessBuilder("python", pathToTTS, filename)
                 .inheritIO()
-                .redirectError(ProcessBuilder.Redirect.PIPE).start();
+                .start();
     }
 
     private void runPython(String pythonFile, String... args)
