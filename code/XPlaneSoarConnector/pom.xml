@@ -105,5 +105,31 @@
         </dependency>
 
 
+
+        <dependency>
+            <groupId>freetts</groupId>
+            <artifactId>com.freetts</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/externals/freetts.jar</systemPath>
+        </dependency>
+
+        <dependency>
+            <groupId>jsoar</groupId>
+            <artifactId>com.jsoar</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/externals/jsoar-build-0.14.9-jar-with-dependencies.jar</systemPath>
+        </dependency>
+
+        <dependency>
+            <groupId>XPlanceConnect</groupId>
+            <artifactId>com.xplaneconnect</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/externals/XPlaneConnect.jar</systemPath>
+        </dependency>
+
+
     </dependencies>
 </project>
