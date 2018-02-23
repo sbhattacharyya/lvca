@@ -40,18 +40,32 @@ public class SymbolTree
      */
     SymbolTree getSubtree (String treeName)
     {
+        SymbolTree result = getSubtree0(treeName);
+
+        if (result == null)
+        {
+            throw new NoSuchElementException("Element not in tree");
+        }
+        return result;
+    }
+
+    private SymbolTree getSubtree0 (String treeName)
+    {
         if (name.equals(treeName))
         {
             return this;
         }
         else
         {
-            return children.stream()
-                    .map(child -> child.getSubtree(treeName))
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElseThrow(() -> new NoSuchElementException("Couldn't find subtree!"));
+            for (SymbolTree child : children)
+            {
+                if (child.getSubtree0(treeName) != null)
+                {
+                    return child;
+                }
+            }
         }
+        return null;
     }
 
     /**

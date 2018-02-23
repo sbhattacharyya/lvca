@@ -3,6 +3,7 @@ package edu.fit.hiai.lvca.translator.soar;
 import edu.fit.hiai.lvca.antlr4.SoarBaseVisitor;
 import edu.fit.hiai.lvca.antlr4.SoarParser;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.tree.ParseTree;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -226,10 +227,16 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         try
         {
-            SymbolTree associatedSubtree = workingMemoryTree.getSubtree(currentVariableDictionary.get(nestedVariableName));
-            return associatedSubtree;
+            String variableName = currentVariableDictionary.get(nestedVariableName);
+            if (variableName != null)
+            {
+                return workingMemoryTree.getSubtree(variableName);
+            }
         }
-        catch (NoSuchElementException e) {}
+        catch (NoSuchElementException e)
+        {
+            e.printStackTrace();
+        }
         return null;
     }
 
@@ -273,7 +280,17 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitValue(SoarParser.ValueContext ctx)
     {
-        return ctx.children.get(0).accept(this);
+        ParseTree node = ctx.children.get(0);
+
+        if (node instanceof SoarParser.VariableContext)
+        {
+            nestedVariableName = node.getText();
+            return null;
+        }
+        else
+        {
+            return node.accept(this);
+        }
     }
 
     @Override
