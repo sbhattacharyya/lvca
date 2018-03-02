@@ -11,6 +11,7 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
@@ -62,10 +63,14 @@ public class SoarTranslator
                 soarSourceFile = parsedOptions.getOptionValue(inputFileOption.getOpt());
             }
 
+            if (soarSourceFile == null) soarSourceFile = getFileFromDialog("Choose Source Soar File");
+            if (outputFile == null) outputFile = getFileFromDialog("Choose output UPPAAL File");
+
             if (parsedOptions.hasOption(debugOption.getOpt()))
             {
                 TestRig.main(new String[]{"edu.fit.hiai.lvca.antlr4.Soar", "soar", "-gui", soarSourceFile});
             }
+
         }
         catch (ParseException e1)
         {
@@ -75,9 +80,6 @@ public class SoarTranslator
         {
             e.printStackTrace();
         }
-
-        if (soarSourceFile == null) soarSourceFile = getFileFromDialog("Choose Source Soar File");
-        if (outputFile == null) outputFile = getFileFromDialog("Choose output UPPAAL File");
     }
 
     private static String getUPPAAL(String soarSourceFile) throws IOException
@@ -97,8 +99,10 @@ public class SoarTranslator
                 .map(name -> name.replace("-", "_"))
                 .collect(Collectors.toSet());
 
-        UPPAALCreator uppaalCreator = new UPPAALCreator(stringAttributeNames, soarParseTree.soar(), variablesPerProductionContext, boolAttributeNames);
-        return uppaalCreator.getXML();
+//        UPPAALCreator uppaalCreator = new UPPAALCreator(stringAttributeNames, soarParseTree.soar(), variablesPerProductionContext, boolAttributeNames);
+//        return uppaalCreator.getXML();
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames));
+        return "";
     }
 
     private static String getFileFromDialog(String title)
