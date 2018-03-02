@@ -59,5 +59,12 @@
             <version>1.2</version>
         </dependency>
 
+        <dependency>
+            <artifactId>..</artifactId>
+            <groupId>..</groupId>
+            <scope>system</scope>
+            <systemPath>${basedir}/dep/model.jar</systemPath>
+        </dependency>
+
     </dependencies>
 </project>

@@ -305,7 +305,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         {
             if (rightHandTree == null)
             {
-                currentVariableDictionary.put(nestedVariableName, subtree.name);
+                if (!currentVariableDictionary.containsKey(nestedVariableName))
+                {
+                    currentVariableDictionary.put(nestedVariableName, subtree.name);
+                }
             }
             else
             {

@@ -180,7 +180,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return textAsNode("name", innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest));
     }
 
-    private String innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest) {
+    private String innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest)
+    {
         List<String> stateVariableComparisons = new LinkedList<>();
 
         // Variable in left hand side
