@@ -64,6 +64,7 @@
             <groupId>..</groupId>
             <scope>system</scope>
             <systemPath>${basedir}/dep/model.jar</systemPath>
+            <version>1.0.0</version>
         </dependency>
 
     </dependencies>
