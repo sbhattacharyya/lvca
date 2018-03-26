@@ -23,9 +23,15 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private String nestedVariableName;
     private Map<String, Map<String, String>> globalVariableDictionary = new HashMap<>();
 
+    /**
+     * Entry point for parsing, get all literal strings, values, and working memory locations used.
+     * @param ctx
+     */
     public SymbolVisitor(SoarParser.SoarContext ctx)
     {
-        ctx.soar_production().forEach(sp -> sp.accept(this));
+        // This call also updates stringSymbols, workingMemoryTree, and booleanSymbols
+        ctx.accept(this); // Call for side effects
+
         stringSymbols.addAll(workingMemoryTree.getAllPaths());
 
         booleanSymbols = booleanSymbols
@@ -58,13 +64,13 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return globalVariableDictionary;
     }
 
-    @Override
-    public SymbolTree visitSoar(SoarParser.SoarContext ctx)
-    {
-        ctx.soar_production().forEach(p -> p.accept(this));
-        return workingMemoryTree;
-    }
-
+    /**
+     * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
+     * The global dictionary keeps track of all Soar variable associations
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitSoar_production(SoarParser.Soar_productionContext ctx)
     {
@@ -86,38 +92,28 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return null;
     }
 
-    @Override
-    public SymbolTree visitCondition_side(SoarParser.Condition_sideContext ctx)
-    {
-        ctx.state_imp_cond().accept(this);
-        ctx.cond().forEach(c -> c.accept(this));
-        return null;
-    }
-
+    /**
+     * Establish "state" as the root of the working tree with the first variable (usually <s>). Update the working
+     * memory with specified attributes.
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitState_imp_cond(SoarParser.State_imp_condContext ctx)
     {
         currentVariableDictionary.put(ctx.id_test().getText(), workingMemoryTree.name);
 
+        // Call for Side Effects
         ctx.attr_value_tests().forEach(avt -> workingMemoryTree.addChild(avt.accept(this)));
         return null;
     }
 
-    @Override
-    public SymbolTree visitCond(SoarParser.CondContext ctx)
-    {
-        ctx.positive_cond().accept(this);
-        return null;
-    }
-
-    @Override
-    public SymbolTree visitPositive_cond(SoarParser.Positive_condContext ctx)
-    {
-        ctx.conds_for_one_id().accept(this);
-        ctx.cond().forEach(c -> c.accept(this));
-        return null;
-    }
-
+    /**
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitConds_for_one_id(SoarParser.Conds_for_one_idContext ctx)
     {

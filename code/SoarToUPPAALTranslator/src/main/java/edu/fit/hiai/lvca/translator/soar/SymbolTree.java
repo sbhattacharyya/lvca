@@ -33,7 +33,7 @@ public class SymbolTree
     }
 
     /**
-     * Return the first subtree (depth-first) that has the given name
+     * Conduct a depth-first search for the tree that has the given name, return that subtree.
      *
      * @param treeName
      * @return
@@ -49,6 +49,11 @@ public class SymbolTree
         return result;
     }
 
+    /**
+     * @param treeName
+     * Recursive companion to above method
+     * @return
+     */
     private SymbolTree getSubtree0 (String treeName)
     {
         if (name.equals(treeName))
@@ -69,8 +74,10 @@ public class SymbolTree
     }
 
     /**
-     * Give a underscore delimited string of parents to the first child of the given name
-     * TODO return a list
+     * Give a underscore delimited string of parents to the first child of the given name, like a file path.
+     *
+     * E.g. grandparent_parent_child
+     *
      * @param treeName
      * @return
      */
@@ -98,7 +105,14 @@ public class SymbolTree
     }
 
     /**
-     * Return a list of all paths from the root node to a leaf node, delimited by underscores
+     * Return a list of all paths from the root node terminating in a leaf node, delimited by underscores.
+     *
+     * E.g.
+     *  grandparent_parent_firstChild
+     *  grandparent_parent_secondChild
+     *  grandparent_childlessUncle
+     *
+     *
      * @return
      */
     List<String> getAllPaths()

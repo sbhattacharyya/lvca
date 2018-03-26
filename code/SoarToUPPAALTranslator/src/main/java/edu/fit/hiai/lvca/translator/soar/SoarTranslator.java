@@ -26,6 +26,17 @@ public class SoarTranslator
     private static String outputFile = null;
     private static boolean debugFlag = false;
 
+    /**
+     * Parse arguments given:
+     * -i [filename] Input file soar
+     * -o [filename] Output-file-uppaal
+     * -d            Parse-tree debug flag
+     *
+     * Translate Soar to Uppaal.
+     *
+     * @param args
+     * @throws IOException
+     */
     public static void main(String[] args) throws IOException
     {
         parseArgs(args);
@@ -35,6 +46,10 @@ public class SoarTranslator
         Files.write(Paths.get(outputFile), uppaalXML.getBytes());
     }
 
+    /**
+     * Using Apache Commons CLI.  Debug Flag uses Antlr's "TestRig" class to spawn a window that shows the parse tree.
+     * @param args
+     */
     private static void parseArgs(String[] args)
     {
         Options options = new Options();
@@ -82,6 +97,14 @@ public class SoarTranslator
         }
     }
 
+    /**
+     * Using two visitors, a symbol visitor and a semantic visitor, translate Soar to Uppaal. The Symbol visitor
+     * associates soar variables, e.g. <o> <s>, with attributes in the working memory tree.  All attributes, values and
+     * variables are stored.  The Semantic visitor maps Soar productions to Uppaal templates.
+     * @param soarSourceFile
+     * @return
+     * @throws IOException
+     */
     private static String getUPPAAL(String soarSourceFile) throws IOException
     {
         SoarParser soarParseTree = new SoarParser(new CommonTokenStream(new SoarLexer(new ANTLRFileStream(soarSourceFile))));
@@ -105,6 +128,12 @@ public class SoarTranslator
         return "";
     }
 
+    /**
+     * If the input or output files are not given via the CLI, a typical "Open File" dialog will spawn to determine the
+     * unspecified values.
+     * @param title
+     * @return
+     */
     private static String getFileFromDialog(String title)
     {
         JFileChooser chooser = new JFileChooser();
