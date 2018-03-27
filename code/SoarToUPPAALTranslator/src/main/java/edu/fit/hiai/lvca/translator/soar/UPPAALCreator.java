@@ -706,7 +706,7 @@ public class UPPAALCreator extends SoarBaseVisitor<Element>
     @Override
     public Element visitValue_make(SoarParser.Value_makeContext ctx)
     {
-        Element resultantElement = ctx.value().accept(this);
+        Element resultantElement = ctx.value(0).accept(this);
 
         long preferences = ctx.pref_specifier().size();
 

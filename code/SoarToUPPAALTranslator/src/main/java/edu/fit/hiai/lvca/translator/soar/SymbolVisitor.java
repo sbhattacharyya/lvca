@@ -12,7 +12,10 @@ import java.util.stream.Collectors;
 /**
  * Created by mstafford on 8/4/16.
  *
- * Get all identifiers used in the Soar agent
+ * Get all symbols and working memory locations used in the Soar agent. This class produces a single SymbolTree that
+ * contains all memory locations used by the Soar agent. Each variable's working memory association is stored. Each
+ * string written is stored.
+ *
  */
 class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 {
@@ -110,6 +113,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     }
 
     /**
+     * Based on the variable that starts the Soar condition, store the attributes in the expression.
+     *
+     * E.g. Given (<o> ^name myop), where <o> points to <s> ^operator, connect the pieces to produce a tree including
+     * state, operator, and name as a SymbolTree.
      *
      * @param ctx
      * @return
@@ -127,24 +134,33 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return null;
     }
 
-    @Override
-    public SymbolTree visitId_test(SoarParser.Id_testContext ctx)
-    {
-        return ctx.test().accept(this);
-    }
-
+    /**
+     * Determine the associations for the variable dictionary.
+     *
+     * E.g. given (<s> ^operator <o>) save the mapping of <o> to ^operator
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitAttr_value_tests(SoarParser.Attr_value_testsContext ctx)
     {
+        //The attribute or list of attributes following the caret. This SymbolTree therefore has no branching
         SymbolTree subtree = getTreeFromList(ctx.attr_test());
+
+        // Global is changed as a side effect of next line
         nestedVariableName = null;
+
+        // Called for side effects
         ctx.value_test().forEach(vt -> vt.accept(this));
 
         if (nestedVariableName != null && !currentVariableDictionary.containsKey(nestedVariableName))
         {
+            // getFirstLeaf() because subtree is really a LinkedList and we want the last element
             currentVariableDictionary.put(nestedVariableName, getFirstLeaf(subtree));
         }
 
+        // this is for translation to Uppaal, which is probably irrelevant at this particular step
         if (ctx.value_test().size() > 0 &&
                 (  ctx.value_test(0).getText().equals("true")
                 || ctx.value_test(0).getText().equals("false")))
@@ -154,6 +170,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return subtree;
     }
 
+    /**
+     * Supports visitAttr_value_tests() method, takes the SymbolTree and returns the first leaf node it finds.
+     *
+     * @param subtree
+     * @return
+     */
     private String getFirstLeaf(SymbolTree subtree)
     {
         SymbolTree t = subtree;
@@ -164,6 +186,15 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return t.name;
     }
 
+    /**
+     * Supports visitAttr_value_tests() method, produces a SymbolTree representation of attributes written using the dot
+     * notation. This tree will have no branching, like that of a LinkedList.
+     *
+     * E.g. (<s> ^operator.name bob) becomes [operator -- name]
+     *
+     * @param ctxs
+     * @return
+     */
     private SymbolTree getTreeFromList(List<? extends ParserRuleContext> ctxs)
     {
         if (ctxs.size() == 1)
@@ -178,64 +209,33 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
     }
 
-    @Override
-    public SymbolTree visitAttr_test(SoarParser.Attr_testContext ctx)
-    {
-        ctx.test().accept(this);
-        return null;
-    }
-
-    @Override
-    public SymbolTree visitValue_test(SoarParser.Value_testContext ctx)
-    {
-        ctx.test().accept(this);
-        return null;
-    }
-
-    @Override
-    public SymbolTree visitTest(SoarParser.TestContext ctx)
-    {
-       return ctx.simple_test().accept(this);
-    }
-
-    @Override
-    public SymbolTree visitSimple_test(SoarParser.Simple_testContext ctx)
-    {
-        return ctx.relational_test().accept(this);
-    }
-
-    @Override
-    public SymbolTree visitRelational_test(SoarParser.Relational_testContext ctx)
-    {
-        return ctx.single_test().accept(this);
-    }
-
-    @Override
-    public SymbolTree visitSingle_test(SoarParser.Single_testContext ctx)
-    {
-        return ctx.children.get(0).accept(this);
-    }
-
+    /**
+     * If a variable is being defined, we want to store it in nestedVariable name for updating the variable
+     * dictionary by higher context.  If the variable is already defined and being used here, we should return the
+     * associated attribute.
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitVariable(SoarParser.VariableContext ctx)
     {
         nestedVariableName = ctx.getText();
 
-        try
+        String variableName = currentVariableDictionary.get(nestedVariableName);
+        if (variableName != null)
         {
-            String variableName = currentVariableDictionary.get(nestedVariableName);
-            if (variableName != null)
-            {
-                return workingMemoryTree.getSubtree(variableName);
-            }
-        }
-        catch (NoSuchElementException e)
-        {
-            e.printStackTrace();
+            return workingMemoryTree.getSubtree(variableName);
         }
         return null;
     }
 
+    /**
+     * Save constants as singleton SymbolTrees for higher contexts
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitConstant(SoarParser.ConstantContext ctx)
     {
@@ -247,6 +247,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
         else if (ctx.Print_string() != null)
         {
+            // Literal Strings in Soar are surrounded by vertical bars
             result = UPPAALCreator.LITERAL_STRING_PREFIX + ctx.Print_string().getText().split("|")[1];
             stringSymbols.add(result);
         }
@@ -254,25 +255,39 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return new SymbolTree(result);
     }
 
-    @Override
-    public SymbolTree visitAction_side(SoarParser.Action_sideContext ctx)
-    {
-        ctx.action().forEach(a -> a.accept(this));
-        return null;
-    }
-
+    /**
+     * Track changes to working memory, update the SymbolTree
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitAction(SoarParser.ActionContext ctx)
     {
         if (ctx.attr_value_make() != null && ctx.variable() != null)
         {
             SymbolTree attachPoint = ctx.variable().accept(this);
+
+            if (attachPoint == null)
+            {
+                System.err.printf("Translation Error: Soar variable %s in production %s is not defined.\n",
+                        ctx.variable().getText(),
+                        ((SoarParser.Soar_productionContext)ctx.parent.parent).sym_constant().getText());
+                System.exit(1);
+            }
+
             ctx.attr_value_make().forEach(avm -> attachPoint.addChild(avm.accept(this)));
             System.out.println();
         }
         return null;
     }
 
+    /**
+     * Pass up the value of the child node.
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitValue(SoarParser.ValueContext ctx)
     {
@@ -289,6 +304,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
     }
 
+    /**
+     *
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitAttr_value_make(SoarParser.Attr_value_makeContext ctx)
     {
@@ -316,21 +337,30 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return subtree;
     }
 
+    /**
+     * Represents the attribute following the caret on the action side. Can also be a variable, the translator does not
+     * handle variable attributes. //fixme
+     * Returns a singleton SymbolTree wrapping the text.
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitVariable_or_sym_constant(SoarParser.Variable_or_sym_constantContext ctx)
     {
         return new SymbolTree(ctx.getText());
     }
 
+    /**
+     * On the action side, this context is everything after the attribute, a combinations of values, variables, and
+     * preferences.
+     *
+     * @param ctx
+     * @return
+     */
     @Override
     public SymbolTree visitValue_make(SoarParser.Value_makeContext ctx)
     {
-        return ctx.value().accept(this);
-    }
-
-    @Override
-    public SymbolTree defaultResult()
-    {
-        return null;
+        return ctx.value(0).accept(this);
     }
 }
