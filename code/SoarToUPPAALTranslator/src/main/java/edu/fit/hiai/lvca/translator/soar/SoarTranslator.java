@@ -41,9 +41,7 @@ public class SoarTranslator
     {
         parseArgs(args);
 
-        String uppaalXML = getUPPAAL(soarSourceFile);
-
-        Files.write(Paths.get(outputFile), uppaalXML.getBytes());
+        getUPPAAL(soarSourceFile);
     }
 
     /**
@@ -105,7 +103,7 @@ public class SoarTranslator
      * @return
      * @throws IOException
      */
-    private static String getUPPAAL(String soarSourceFile) throws IOException
+    private static void getUPPAAL(String soarSourceFile) throws IOException
     {
         SoarParser soarParseTree = new SoarParser(new CommonTokenStream(new SoarLexer(new ANTLRFileStream(soarSourceFile))));
 
@@ -125,7 +123,6 @@ public class SoarTranslator
 //        UPPAALCreator uppaalCreator = new UPPAALCreator(stringAttributeNames, soarParseTree.soar(), variablesPerProductionContext, boolAttributeNames);
 //        return uppaalCreator.getXML();
         soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames));
-        return "";
     }
 
     /**

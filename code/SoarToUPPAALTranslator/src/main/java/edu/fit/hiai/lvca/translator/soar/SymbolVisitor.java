@@ -23,7 +23,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private Set<String> booleanSymbols = new HashSet<>();
     private SymbolTree workingMemoryTree = new SymbolTree("state");
     private Map<String, String> currentVariableDictionary;
-    private String nestedVariableName;
+    private Set<String> nestedVariableNames = new HashSet<>();
     private Map<String, Map<String, String>> globalVariableDictionary = new HashMap<>();
 
     /**
@@ -37,7 +37,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         stringSymbols.addAll(workingMemoryTree.getAllPaths());
 
-        booleanSymbols = booleanSymbols
+        booleanSymbols = booleanSymbols //todo #what
                 .stream()
                 .map(attr -> workingMemoryTree.pathTo(attr))
                 .collect(Collectors.toSet());
@@ -147,18 +147,20 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         //The attribute or list of attributes following the caret. This SymbolTree therefore has no branching
         SymbolTree subtree = getTreeFromList(ctx.attr_test());
-
         // Global is changed as a side effect of next line
-        nestedVariableName = null;
-
+        nestedVariableNames.clear();
         // Called for side effects
         ctx.value_test().forEach(vt -> vt.accept(this));
 
-        if (nestedVariableName != null && !currentVariableDictionary.containsKey(nestedVariableName))
+        for (String nestedVariableName : nestedVariableNames)
         {
-            // getFirstLeaf() because subtree is really a LinkedList and we want the last element
-            currentVariableDictionary.put(nestedVariableName, getFirstLeaf(subtree));
+            if (!currentVariableDictionary.containsKey(nestedVariableName))
+            {
+                // getFirstLeaf() because subtree is really a LinkedList and we want the last element
+                currentVariableDictionary.put(nestedVariableName, getFirstLeaf(subtree));
+            }
         }
+
 
         // this is for translation to Uppaal, which is probably irrelevant at this particular step
         if (ctx.value_test().size() > 0 &&
@@ -220,7 +222,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitVariable(SoarParser.VariableContext ctx)
     {
-        nestedVariableName = ctx.getText();
+        nestedVariableNames.add(ctx.getText());
 
         String variableName = currentVariableDictionary.get(nestedVariableName);
         if (variableName != null)
@@ -248,7 +250,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         else if (ctx.Print_string() != null)
         {
             // Literal Strings in Soar are surrounded by vertical bars
-            result = UPPAALCreator.LITERAL_STRING_PREFIX + ctx.Print_string().getText().split("|")[1];
+            //This is dumb
+            result = UPPAALSemanticVisitor.LITERAL_STRING_PREFIX + ctx.Print_string().getText().split("|")[1];
             stringSymbols.add(result);
         }
 
@@ -295,7 +298,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         if (node instanceof SoarParser.VariableContext)
         {
-            nestedVariableName = node.getText();
+            nestedVariableNames = node.getText();
             return null;
         }
         else
@@ -315,16 +318,20 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         SymbolTree subtree = getTreeFromList(ctx.variable_or_sym_constant());
 
-        nestedVariableName = null;
+        nestedVariableNames.clear();
         SymbolTree rightHandTree = ctx.value_make().accept(this);
 
-        if (nestedVariableName != null)
+        if (!nestedVariableNames.isEmpty())
         {
             if (rightHandTree == null)
             {
-                if (!currentVariableDictionary.containsKey(nestedVariableName))
+                for (String nestedVariableName : nestedVariableNames)
                 {
-                    currentVariableDictionary.put(nestedVariableName, subtree.name);
+                    if (!currentVariableDictionary.containsKey(nestedVariableName))
+                    {
+                        currentVariableDictionary.put(nestedVariableName, subtree.name);
+                    }
+
                 }
             }
             else

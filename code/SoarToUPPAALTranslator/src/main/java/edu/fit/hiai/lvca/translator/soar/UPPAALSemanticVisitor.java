@@ -644,21 +644,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     @Override
-    public Node visitValue_make(SoarParser.Value_makeContext ctx) {
-        Node resultantElement = ctx.value().accept(this);
+    public Node visitValue_make(SoarParser.Value_makeContext ctx)
+    {
+        Node resultantElement = null;
+        for (SoarParser.ValueContext valueContext : ctx.value())
+        {
+            resultantElement = valueContext.accept(this);
+        }
 
         long preferences = ctx.pref_specifier().size();
 
-        if (preferences > 0)
-        {
+        if (preferences > 0) {
             String concatenatedPreferences = ctx.pref_specifier()
                     .stream()
                     .map(RuleContext::getText)
                     .collect(Collectors.joining());
-
             resultantElement.setProperty("pref", concatenatedPreferences);
         }
-
         return resultantElement;
     }
 
