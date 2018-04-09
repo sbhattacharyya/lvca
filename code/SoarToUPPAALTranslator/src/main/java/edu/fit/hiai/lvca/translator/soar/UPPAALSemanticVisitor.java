@@ -19,19 +19,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     static final String LITERAL_STRING_PREFIX = "literal_string__";
     private final Set<String> _globals;
     private final Set<String> _booleanGlobals;
+    private final ArrayList<SymbolTree> _operators;
     private final Map<String, Map<String, String>> _variableDictionary;
     private SoarParser.Soar_productionContext _goalProductionContext;
     private Integer _locationCounter = 0;
     Document ourDocument = new Document(new PrototypeDocument());
     private Template lastTemplate = null;
     private final Set<String> _templateNames = new HashSet<>();
-    private int NUMBER_OF_OPERATORS = 0;
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames)
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators)
     {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
+        _operators = operators;
     }
 
     private String getCounter() {
@@ -78,7 +79,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         vars += "\n" +
                 "int id = 1;\n" +
-                "const int N = " + NUMBER_OF_OPERATORS + ";\n" +
+                "const int N = " + _operators.size() + ";\n" +
                 "\n" +
                 "typedef struct {\n" +
                 "\tbool isRequired;\n" +
@@ -474,14 +475,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     .stream()
                     .map(RuleContext::getText)
                     .collect(Collectors.joining("_"));
-
             String leftSide = prefix + "_" + suffix;
 
-            if (suffix.equals("operator")) {
-                NUMBER_OF_OPERATORS++;
-            }
-
-            Node rightSideElement = attrCtx.value_make().accept(this);
+            Node rightSideElement = attrCtx.value_make(0).accept(this);
             String[] rightSide = determineAssignment(leftSide, rightSideElement, stateAssignments);
 
             if (rightSide != null)
@@ -529,17 +525,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         if (stateAssignments.containsKey(leftSide))
         {
             String currentPrefs = stateAssignments.get(leftSide)[1];
-
-            String bestPref = getBestPreference(prefs, currentPrefs);
-
-            if (bestPref.equals(prefs))
-            {
-                return new String[]{rightSide, prefs};
-            }
-            else
-            {
-                return null;
-            }
+            return null;
         }
         else
         {
@@ -547,31 +533,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
     }
 
-    private String getBestPreference(String pref1, String pref2)
-    {
-        if (pref1.contains("~") && !pref2.contains("~"))
-        {
-            return pref2;
-        }
-        else if (pref2.contains("~") && !pref1.contains("~"))
-        {
-            return pref1;
-        }
-        else
-        {
-            String orderedPreferences = "!>+=<";
-            for (int i = 0; i < orderedPreferences.length(); i++)
-            {
-                String nextPref = orderedPreferences.substring(i,i);
-
-                if (pref1.contains(nextPref) && !pref2.contains(nextPref))
-                {
-                    return pref1;
-                }
-            }
-        }
-        return pref1;
-    }
 
     @Override
     public Node visitPrint(SoarParser.PrintContext ctx) {
@@ -629,7 +590,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 .map(RuleContext::getText)
                 .collect(Collectors.joining("_"));
 
-        Node rightSide = ctx.value_make().accept(this);
+        Node rightSide = ctx.value_make(0).accept(this);
 
         if (rightSide == null) {
             return generateNode();
@@ -642,32 +603,32 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     public Node visitVariable_or_sym_constant(SoarParser.Variable_or_sym_constantContext ctx) {
         return null;
     }
+//todo FIX VISIT_VALUE_MAKE in UPPAAALSemanticVisitor
+//    @Override
+//    public Node visitValue_make(SoarParser.Value_makeContext ctx)
+//    {
+//        Node resultantElement = null;
+//        for (SoarParser.ValueContext valueContext : ctx.value())
+//        {
+//            resultantElement = valueContext.accept(this);
+//        }
+//
+//        long preferences = ctx.pref_specifier().size();
+//
+//        if (preferences > 0) {
+//            String concatenatedPreferences = ctx.pref_specifier()
+//                    .stream()
+//                    .map(RuleContext::getText)
+//                    .collect(Collectors.joining());
+//            resultantElement.setProperty("pref", concatenatedPreferences);
+//        }
+//        return resultantElement;
+//    }
 
-    @Override
-    public Node visitValue_make(SoarParser.Value_makeContext ctx)
-    {
-        Node resultantElement = null;
-        for (SoarParser.ValueContext valueContext : ctx.value())
-        {
-            resultantElement = valueContext.accept(this);
-        }
-
-        long preferences = ctx.pref_specifier().size();
-
-        if (preferences > 0) {
-            String concatenatedPreferences = ctx.pref_specifier()
-                    .stream()
-                    .map(RuleContext::getText)
-                    .collect(Collectors.joining());
-            resultantElement.setProperty("pref", concatenatedPreferences);
-        }
-        return resultantElement;
-    }
-
-    @Override
-    public Node visitPref_specifier(SoarParser.Pref_specifierContext ctx) {
-        return null;
-    }
+//    @Override
+//    public Node visitPref_specifier(SoarParser.Pref_specifierContext ctx) {
+//        return null;
+//    }
 
     @Override
     public Node visitUnary_pref(SoarParser.Unary_prefContext ctx) {

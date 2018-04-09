@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -110,6 +111,8 @@ public class SoarTranslator
         SymbolVisitor symbolVisitor = new SymbolVisitor(soarParseTree.soar());
         Set<String> stringAttributeNames = symbolVisitor.getStringSymbols();
         Set<String> boolAttributeNames = symbolVisitor.getBooleanSymbols();
+        ArrayList<SymbolTree> operators = symbolVisitor.getOperators();
+        ArrayList<ArrayList<String>> operatorsAttributesAndValues = symbolVisitor.getOperatorAttributesAndValues();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
 
@@ -122,7 +125,7 @@ public class SoarTranslator
 
 //        UPPAALCreator uppaalCreator = new UPPAALCreator(stringAttributeNames, soarParseTree.soar(), variablesPerProductionContext, boolAttributeNames);
 //        return uppaalCreator.getXML();
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators));
     }
 
     /**
