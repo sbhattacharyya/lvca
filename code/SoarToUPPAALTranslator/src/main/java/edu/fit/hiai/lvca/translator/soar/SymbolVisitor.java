@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
  */
 class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 {
+    private int OPERATORID = 1;
     private Set<String> stringSymbols = new HashSet<>();
     private Set<String> booleanSymbols = new HashSet<>();
     private SymbolTree workingMemoryTree = new SymbolTree("state");
@@ -75,6 +76,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     ArrayList<ArrayList<String>> getOperatorAttributesAndValues() { return operatorAttributesAndValues; }
 
+    int getOPERATORID() { return OPERATORID; }
+
     /**
      * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
      * The global dictionary keeps track of all Soar variable associations
@@ -124,11 +127,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         // Call for Side Effects
         for (SoarParser.Attr_value_testsContext attr_value_testsContext : ctx.attr_value_tests()) {
             SymbolTree child = attr_value_testsContext.accept(this);
-            if (!child.getChildren().get(0).name.equals("withChildren")) {
-                child = child.getChildren().get(0);
-            } else {
-                child = child.getChildren().get(1);
-            }
+            //gets tree without children
+            child = child.getChildren().get(0);
             workingMemoryTree.addChild(child);
         }
 
@@ -162,7 +162,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 child = child.getChildren().get(1);
             }
             attachPoint.addChild(child);
-            //FIX, doesn't work correctly
+            //fix ???
             SymbolTree operator = currentOperators.get(ctx.id_test().getText());
             SymbolTree attributeValue = childWithChildren.getChildren().get(0);
             operator.addChild(attributeValue);
@@ -415,7 +415,14 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
                 if (variable_or_sym_constantContext.getText().equals("operator")) {
                     if (!currentOperators.containsKey(rightHandTree.name)) {
-                        rightHandTree.addChild(new SymbolTree("create"));
+                        SymbolTree createBranch = new SymbolTree("create");
+
+                        SymbolTree idBranch = new SymbolTree("id");
+                        idBranch.addChild(new SymbolTree("" + OPERATORID));
+                        OPERATORID++;
+                        createBranch.addChild(idBranch);
+
+                        rightHandTree.addChild(createBranch);
                         currentOperators.put(rightHandTree.name, rightHandTree);
                     } else {
                         SymbolTree operatorTree  = currentOperators.get(rightHandTree.name);
@@ -539,7 +546,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                     returnTree.addChild(pref);
                 }
             }
-
+        } else if (((SoarParser.Attr_value_makeContext) ctx.parent).variable_or_sym_constant().get(0).getText().equals("operator")) {
+            returnTree.addChild(new SymbolTree("isAcceptable"));
         }
         return returnTree;
     }
@@ -550,17 +558,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         SymbolTree returnTree = null;
         if (ctx.unary_or_binary_pref() != null) {
-            String isWhat = null;
+            String isWhat = ctx.unary_or_binary_pref().accept(this).name;
             if (ctx.value() != null) {
-                switch(ctx.unary_or_binary_pref().getText().charAt(0)) {
-                    case '>': isWhat = "isBetterTo";
-                        break;
-                    case '<': isWhat = "isWorseTo";
-                        break;
-                    case '=': isWhat = "isUnaryOrBinaryIndifferentTo";
-                        break;
-                    default: break;
-                }
                 if (isWhat != null) {
                     returnTree = new SymbolTree(isWhat);
                     returnTree.addChild(new SymbolTree(ctx.value().getText()));
@@ -571,40 +570,30 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     }
 
     @Override
+    public SymbolTree visitUnary_or_binary_pref(SoarParser.Unary_or_binary_prefContext ctx) {
+        return new SymbolTree(UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0)));
+    }
+
+    @Override
     public SymbolTree visitValue_pref_clause(SoarParser.Value_pref_clauseContext ctx)
     {
         SymbolTree returnTree = null;
         if (ctx.unary_pref() != null) {
-            String isWhat = null;
-            switch(ctx.unary_pref().getText().charAt(0)) {
-                case '+': isWhat = "isAcceptable";
-                          break;
-                case '-': isWhat = "isRejected";
-                          break;
-                case '!': isWhat = "isRequired";
-                          break;
-                case '~': isWhat = "isProhibited";
-                          break;
-                default: break;
-            }
+            String isWhat = ctx.unary_pref().accept(this).name;
             if (isWhat != null) {
                 returnTree = new SymbolTree(isWhat);
             }
         } else if (ctx.unary_or_binary_pref() != null) {
-            String isWhat = null;
-            switch(ctx.unary_or_binary_pref().getText().charAt(0)) {
-                case '>': isWhat = "isBest";
-                    break;
-                case '<': isWhat = "isWorst";
-                    break;
-                case '=': isWhat = "isUnaryIndifferent";
-                    break;
-                default: break;
-            }
+            String isWhat = ctx.unary_or_binary_pref().accept(this).name;
             if (isWhat != null) {
                 returnTree = new SymbolTree(isWhat);
             }
         }
         return returnTree;
+    }
+
+    @Override
+    public SymbolTree visitUnary_pref(SoarParser.Unary_prefContext ctx) {
+        return new SymbolTree(UtilityForVisitors.unaryToString(ctx.getText().charAt(0)));
     }
 }

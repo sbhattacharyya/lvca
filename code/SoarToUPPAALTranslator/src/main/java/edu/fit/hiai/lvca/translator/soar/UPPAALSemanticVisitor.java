@@ -8,7 +8,9 @@ import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.RuleNode;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import sun.awt.Symbol;
 
+import javax.rmi.CORBA.Util;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,6 +22,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private final Set<String> _globals;
     private final Set<String> _booleanGlobals;
     private final ArrayList<SymbolTree> _operators;
+    private SymbolTree currentOperators;
+    private int OPERATOR_INDEX = 0;
+    private final int NUM_OPERATORS;
     private final Map<String, Map<String, String>> _variableDictionary;
     private SoarParser.Soar_productionContext _goalProductionContext;
     private Integer _locationCounter = 0;
@@ -27,12 +32,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private Template lastTemplate = null;
     private final Set<String> _templateNames = new HashSet<>();
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators)
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators)
     {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
         _operators = operators;
+        NUM_OPERATORS = numOperators;
     }
 
     private String getCounter() {
@@ -79,7 +85,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         vars += "\n" +
                 "int id = 1;\n" +
-                "const int N = " + _operators.size() + ";\n" +
+                "const int N = " + NUM_OPERATORS + ";\n" +
                 "\n" +
                 "typedef struct {\n" +
                 "\tbool isRequired;\n" +
@@ -212,6 +218,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         Location startLocation = makeLocationWithCoordinates(currentTemplate, "Start", startStateID, true, true, -152, -80, -208, -80);
 
         makeEdgeWithNails(currentTemplate, runLocation, startLocation, null, null, "Run_Rule?", new Integer[]{16, -192}, null, null, null, null, new Integer[]{40, -168});
+
+        currentOperators = _operators.get(OPERATOR_INDEX);
+        OPERATOR_INDEX++;
 
         String guard = (String) ctx.condition_side().accept(this).getProperty("name").getValue();
         String assignment = (String) ctx.action_side().accept(this).getProperty("name").getValue();
@@ -477,12 +486,14 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     .collect(Collectors.joining("_"));
             String leftSide = prefix + "_" + suffix;
 
-            Node rightSideElement = attrCtx.value_make(0).accept(this);
-            String[] rightSide = determineAssignment(leftSide, rightSideElement, stateAssignments);
+            for (SoarParser.Value_makeContext value_makeContext : attrCtx.value_make()) {
+                Node rightSideElement = value_makeContext.accept(this);
+                String[] rightSide = determineAssignment(leftSide, rightSideElement, stateAssignments);
 
-            if (rightSide != null)
-            {
-                stateAssignments.put(leftSide, rightSide);
+                if (rightSide != null)
+                {
+                    stateAssignments.put(leftSide, rightSide);
+                }
             }
         }
         return stateAssignments.entrySet().stream()
@@ -498,7 +509,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
 
         String rightSide;
-        String prefs;
+        String prefs= null;
 
         if (rightSideElement.getProperty("const") != null)
         {
@@ -508,23 +519,17 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         {
             rightSide = getText(rightSideElement, "expr");
         }
-        else
+        else if (rightSideElement.getProperty("pref") != null)
         {
+            return null;
+        } else {
             return null;
         }
 
-        if (rightSideElement.getProperty("pref") != null)
-        {
-            prefs = getText(rightSideElement, "pref");
-        }
-        else
-        {
-            prefs = "+";
-        }
-
+        //Ignorming multi-valued attributes right now.  Should look at later when adding them in
         if (stateAssignments.containsKey(leftSide))
         {
-            String currentPrefs = stateAssignments.get(leftSide)[1];
+            String multiValuedAttributes = stateAssignments.get(leftSide)[1];
             return null;
         }
         else
@@ -604,40 +609,101 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 //todo FIX VISIT_VALUE_MAKE in UPPAAALSemanticVisitor
-//    @Override
-//    public Node visitValue_make(SoarParser.Value_makeContext ctx)
-//    {
-//        Node resultantElement = null;
-//        for (SoarParser.ValueContext valueContext : ctx.value())
-//        {
-//            resultantElement = valueContext.accept(this);
-//        }
-//
-//        long preferences = ctx.pref_specifier().size();
-//
-//        if (preferences > 0) {
-//            String concatenatedPreferences = ctx.pref_specifier()
-//                    .stream()
-//                    .map(RuleContext::getText)
-//                    .collect(Collectors.joining());
-//            resultantElement.setProperty("pref", concatenatedPreferences);
-//        }
-//        return resultantElement;
-//    }
+    @Override
+    public Node visitValue_make(SoarParser.Value_makeContext ctx)
+    {
+        Node value = ctx.value().accept(this);
 
-//    @Override
-//    public Node visitPref_specifier(SoarParser.Pref_specifierContext ctx) {
-//        return null;
-//    }
+        if (((SoarParser.Attr_value_makeContext) ctx.parent).variable_or_sym_constant().get(0).getText().equals("operator")) {
+            if (ctx.value_pref_binary_value() != null) {
+                Node valuePrefBinaryValue = ctx.value_pref_binary_value().accept(this);
+
+                try {
+                    Integer.parseInt(getText(valuePrefBinaryValue, "secondValue"));
+                } catch(NumberFormatException e) {
+                    String replaceVariable = getText(valuePrefBinaryValue, "secondValue");
+                    valuePrefBinaryValue.setProperty("secondValue", getID(getText(value, "var")));
+                    value.setProperty("var", replaceVariable);
+                }
+
+                value.setProperty("binaryPref", getText(valuePrefBinaryValue, "preference"));
+                value.setProperty("secondValue", getText(valuePrefBinaryValue, "secondValue"));
+                value.setProperty("pref", "binary");
+            } else if (ctx.value_pref_clause().size() != 0) {
+                StringBuilder preferences = new StringBuilder();
+                for (SoarParser.Value_pref_clauseContext value_pref_clauseContext : ctx.value_pref_clause()) {
+                    preferences.append(getText(value_pref_clauseContext.accept(this), "unaryPref") + ",");
+                }
+                value.setProperty("unaryPrefCollection", preferences.toString());
+                value.setProperty("pref", "unary");
+            } else {
+                value.setProperty("unaryPrefCollection", "isAcceptable,");
+                value.setProperty("pref", "unary");
+            }
+        }
+        return value;
+    }
+
+    private String getID (String variableName) {
+        SymbolTree otherOperator = currentOperators.getSubtree(variableName);
+        String otherOperatorID = otherOperator.getSubtree("create").getSubtree("id").getChildren().get(0).name;
+        return otherOperatorID;
+    }
+
+    @Override
+    public Node visitValue_pref_binary_value(SoarParser.Value_pref_binary_valueContext ctx) {
+        Node valuePrefNode = null;
+
+        if (ctx.unary_or_binary_pref() != null) {
+            Node unaryOrBinaryPref = ctx.unary_or_binary_pref().accept(this);
+
+            Node secondValue = ctx.value().accept(this);
+            String secondValueProperty;
+
+            if (getText(unaryOrBinaryPref, "unaryBinaryPref").equals("isWorseTo")) {
+                unaryOrBinaryPref.setProperty("unaryBinaryPref", "isBetterTo");
+                secondValueProperty = getText(secondValue, "var");
+            } else {
+                String otherOperatorID = getID(getText(secondValue, "var"));
+                secondValueProperty = otherOperatorID;
+            }
+
+            valuePrefNode = textAsNode("preference", getText(unaryOrBinaryPref, "unaryBinaryPref"));
+            valuePrefNode.setProperty("secondValue", secondValueProperty);
+        }
+        return valuePrefNode;
+    }
 
     @Override
     public Node visitUnary_pref(SoarParser.Unary_prefContext ctx) {
-        return null;
+        Node prefNode = null;
+        String isWhat = UtilityForVisitors.unaryToString(ctx.getText().charAt(0));
+        if (isWhat != null) {
+            prefNode = textAsNode("unaryPref", isWhat);
+        }
+        return prefNode;
     }
 
     @Override
     public Node visitUnary_or_binary_pref(SoarParser.Unary_or_binary_prefContext ctx) {
-        return null;
+        Node prefNode = null;
+        String isWhat = UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0));
+        if (isWhat != null) {
+            prefNode = textAsNode("unaryBinaryPref", isWhat);
+        }
+        return prefNode;
+    }
+
+    public Node visitValue_pref_clause(SoarParser.Value_pref_clauseContext ctx)
+    {
+        String preference = null;
+        if (ctx.unary_or_binary_pref() != null) {
+            preference = getText(ctx.unary_or_binary_pref().accept(this), "unaryBinaryPref");
+        } else if (ctx.unary_pref() != null) {
+            preference = getText(ctx.unary_pref().accept(this), "unaryPref");
+        }
+
+        return textAsNode("unaryPref", preference);
     }
 
     @Override

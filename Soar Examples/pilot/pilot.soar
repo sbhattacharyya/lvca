@@ -1,3 +1,0 @@
-pushd pilot
-source pilot_source.soar
-popd
