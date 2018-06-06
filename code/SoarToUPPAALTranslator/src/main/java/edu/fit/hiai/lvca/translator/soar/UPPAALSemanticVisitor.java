@@ -31,6 +31,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     Document ourDocument = new Document(new PrototypeDocument());
     private Template lastTemplate = null;
     private final Set<String> _templateNames = new HashSet<>();
+    private boolean unaryOrBinaryFlag = false;
 
     public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators)
     {
@@ -217,14 +218,30 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         Location startLocation = makeLocationWithCoordinates(currentTemplate, "Start", startStateID, true, true, -152, -80, -208, -80);
 
-        makeEdgeWithNails(currentTemplate, runLocation, startLocation, null, null, "Run_Rule?", new Integer[]{16, -192}, null, null, null, null, new Integer[]{40, -168});
-
         currentOperators = _operators.get(OPERATOR_INDEX);
         OPERATOR_INDEX++;
 
-        String guard = (String) ctx.condition_side().accept(this).getProperty("name").getValue();
-        String assignment = (String) ctx.action_side().accept(this).getProperty("name").getValue();
+        Node conditionSide = ctx.condition_side().accept(this);
+        String guard = getText(conditionSide, "guards");
+        Node actionSide = ctx.action_side().accept(this);
+        String assignment = getText(actionSide, "assignments");
         makeEdge(currentTemplate, startLocation, runLocation, null, null, "Run_Rule?", new Integer[]{8, -104}, guard, new Integer[]{-152, -48}, assignment, new Integer[]{-152, -64});
+
+        String inverseGuard;
+        if (getText(conditionSide, "hasInverseGuards").equals("true")) {
+            inverseGuard = getText(conditionSide, "inverseGuards");
+        } else {
+            inverseGuard = null;
+        }
+
+        String inverseAssignment;
+        if (getText(actionSide, "hasInverseAssignments").equals("true")) {
+            inverseAssignment = getText(actionSide, "inverseAssignments");
+        } else {
+            inverseAssignment = null;
+        }
+
+        makeEdgeWithNails(currentTemplate, runLocation, startLocation, null, null, "Run_Rule?", new Integer[]{16, -220}, inverseGuard, new Integer[]{16, -206}, inverseAssignment, new Integer[] {16, -192}, new Integer[]{40, -168});
 
         return null;
     }
@@ -237,12 +254,41 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     @Override
     public Node visitCondition_side(SoarParser.Condition_sideContext ctx) {
         List<String> guards = new LinkedList<>();
-        guards.add(getText(ctx.state_imp_cond().accept(this), "name"));
-        guards.addAll(ctx.cond().stream().map(c -> getText(c.accept(this), "name")).collect(Collectors.toList()));
-        return textAsNode("name", guards
+        List<String> inverseGuards = new LinkedList<>();
+
+        Node stateImpCondNode = ctx.state_imp_cond().accept(this);
+        guards.add(getText(stateImpCondNode, "conds"));
+        if (inverseGuards != null && getText(stateImpCondNode, "i-supported").equals("true")) {
+            inverseGuards.add(getText(stateImpCondNode, "inverseConds"));
+        } else {
+            inverseGuards = null;
+        }
+
+        for (SoarParser.CondContext condContext : ctx.cond()) {
+            Node conditionNode = condContext.accept(this);
+            guards.add(getText(conditionNode, "conds"));
+            if (inverseGuards != null && getText(conditionNode, "i-supported").equals("true")) {
+                inverseGuards.add(getText(conditionNode, "inverseConds"));
+            } else {
+                inverseGuards = null;
+            }
+        }
+
+        Node returnNode = textAsNode("guards", guards
                 .stream()
                 .filter(g -> g != null && !g.equals(""))
                 .collect(Collectors.joining(" && ")));
+        if (inverseGuards != null) {
+            returnNode.setProperty("inverseGuards", inverseGuards
+                    .stream()
+                    .filter(g -> g != null && !g.equals(""))
+                    .collect(Collectors.joining(" && ")));
+            returnNode.setProperty("hasInverseGuards", "true");
+        } else {
+            returnNode.setProperty("hasInverseGuards", "false");
+        }
+
+        return returnNode;
     }
 
     private Node textAsNode(String property, String text)
@@ -262,18 +308,33 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return ourDocument.createTemplate();
     }
 
+    private Node getConditionAndInverseConditionNode(String[] condsAndInverseConds) {
+        Node returnNode = textAsNode("conds", condsAndInverseConds[0]);
+        if (condsAndInverseConds[1] != null) {
+            returnNode.setProperty("i-supported", "true");
+            returnNode.setProperty("inverseConds", condsAndInverseConds[1]);
+        } else {
+            returnNode.setProperty("i-supported", "false");
+        }
+        return returnNode;
+    }
+
     @Override
     public Node visitState_imp_cond(SoarParser.State_imp_condContext ctx) {
 
         String productionName = ((SoarParser.Soar_productionContext) ctx.parent.parent).sym_constant().getText();
         String idTest = ctx.id_test().getText();
         Map<String, String> localVariableDictionary = _variableDictionary.get(productionName);
-        return textAsNode("name", innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest));
+
+        String[] condsAndInverseConds = innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest);
+
+        return getConditionAndInverseConditionNode(condsAndInverseConds);
     }
 
-    private String innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest)
+    private String[] innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest)
     {
         List<String> stateVariableComparisons = new LinkedList<>();
+        List<String> inverseStateVariableComparisons = new LinkedList<>();
 
         // Variable in left hand side
         if (localVariableDictionary.containsKey(idTest))
@@ -287,9 +348,17 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
                 String leftTerm = variablePath + "_" + attrPath;
 
+                int lengthOfState_Operator = 14;
+                if (leftTerm.length() >= 14 && leftTerm.substring(0, lengthOfState_Operator).equals("state_operator")) {
+                    inverseStateVariableComparisons = null;
+                }
+
                 if (attributeCtx.getText().startsWith("-^"))
                 {
                     stateVariableComparisons.add(leftTerm + " == nil");
+                    if (inverseStateVariableComparisons != null) {
+                        inverseStateVariableComparisons.add(leftTerm + " != nil");
+                    }
                 }
                 else
                 {
@@ -300,20 +369,37 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         Node relationAndRightTerm = attributeCtx.value_test(0).accept(this);
 
                         String relation = getText(relationAndRightTerm, "rel");
+                        String inverseRelation = relation == "==" ? "!=" : "==";
+
                         String rightTerm;
+                        String inverseRightTerm;
 
                         if (relation.equals("="))
                         {
                             relation = "==";
+                            inverseRelation = "!=";
                         }
 
                         if (relationAndRightTerm.getProperty("var") != null)
                         {
                             rightTerm = localVariableDictionary.get(getText(relationAndRightTerm,"var"));
+                            inverseRightTerm = rightTerm;
+                            int operatorWordSize = 7;
+                            if (rightTerm.length() > operatorWordSize && !rightTerm.substring(rightTerm.length() - operatorWordSize - 1).equals("operator") && leftTerm.equals(rightTerm)) {
+                                relation = "!=";
+                                rightTerm = "nil";
+                                if (inverseStateVariableComparisons != null) {
+                                    String withoutTempVariable = localVariableDictionary.get(getText(relationAndRightTerm, "var"));
+                                    String newTempVariable = withoutTempVariable + "_temp";
+                                    _globals.add(newTempVariable);
+                                    inverseRightTerm = newTempVariable;
+                                }
+                            }
                         }
                         else
                         {
                             rightTerm = getText(relationAndRightTerm, "const");
+                            inverseRightTerm = rightTerm;
                         }
 
                         if (rightTerm == null)
@@ -330,7 +416,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         }
                         else if (!rightTerm.equals(leftTerm))
                         {
-                            stateVariableComparisons.add(simplifiedString(leftTerm) + " " + relation + " " + simplifiedString(rightTerm));
+                            String simplifiedLeftTerm = simplifiedString(leftTerm);
+                            String simplifiedRightTerm = simplifiedString(rightTerm);
+                            String simplifiedInverseRightTerm = simplifiedString(inverseRightTerm);
+                            stateVariableComparisons.add(simplifiedLeftTerm + " " + relation + " " + simplifiedRightTerm);
+                            if (inverseStateVariableComparisons != null) {
+                                inverseStateVariableComparisons.add(simplifiedLeftTerm + " " + inverseRelation + " " + simplifiedInverseRightTerm);
+                            }
                         }
                     }
                     else
@@ -342,10 +434,21 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
         }
 
-        return stateVariableComparisons
+        String[] returnArray = new String[2];
+        returnArray[0] = stateVariableComparisons
                 .stream()
                 .filter(c -> c != null && !c.equals(""))
                 .collect(Collectors.joining(" && "));
+        if (inverseStateVariableComparisons != null) {
+            returnArray[1] = inverseStateVariableComparisons
+                    .stream()
+                    .filter(c -> c != null && !c.equals(""))
+                    .collect(Collectors.joining(" && "));
+        } else {
+            returnArray[1] = null;
+        }
+
+        return returnArray;
     }
 
     @Override
@@ -364,7 +467,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         String idTest = ctx.id_test().getText();
         Map<String, String> localVariableDictionary = _variableDictionary.get(productionName);
 
-        return textAsNode("name", innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest));
+        String[] condsAndInverseConds = innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest);
+
+        return getConditionAndInverseConditionNode(condsAndInverseConds);
     }
 
     @Override
@@ -458,11 +563,35 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     @Override
     public Node visitAction_side(SoarParser.Action_sideContext ctx) {
-    return textAsNode("name", ctx.action()
-                        .stream()
-                        .map(action -> getText(action.accept(this), "name"))
-                        .filter(t -> t != null && !t.equals(""))
-                        .collect(Collectors.joining(", ")));
+        StringBuilder assignments = new StringBuilder();
+        StringBuilder inverseAssignments = new StringBuilder();
+        for (SoarParser.ActionContext actionContext : ctx.action()) {
+            Node actionNode = actionContext.accept(this);
+            assignments.append(getText(actionNode, "assignments"));
+            assignments.append(", ");
+            if (getText(actionNode, "hasInverseAssignments").equals("true")) {
+                inverseAssignments.append(getText(actionNode, "inverseAssignments"));
+                inverseAssignments.append(", ");
+            }
+        }
+
+        if (assignments.length() >= 2 && assignments.charAt(assignments.length() - 2) == ',') {
+            assignments.delete(assignments.length() - 2, assignments.length());
+        }
+
+        Node returnNode = textAsNode("assignments", assignments.toString());
+
+        if (inverseAssignments.length() > 0) {
+            if (inverseAssignments.length() >= 2 && inverseAssignments.charAt(inverseAssignments.length() - 2) == ',') {
+                inverseAssignments.delete(inverseAssignments.length() - 2, inverseAssignments.length());
+            }
+            returnNode.setProperty("hasInverseAssignments", "true");
+            returnNode.setProperty("inverseAssignments", inverseAssignments.toString());
+        } else {
+            returnNode.setProperty("hasInverseAssignments", "false");
+        }
+
+        return returnNode;
     }
 
     @Override
@@ -471,12 +600,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         Map<String, String> localDictionary = _variableDictionary.get(productionName);
         String prefix = localDictionary.get(ctx.variable().getText());
 
-        return textAsNode("name", innerVisitAction(prefix, ctx.attr_value_make()));
+        String[] stateAssignmentsAndInverseAssignments = innerVisitAction(prefix, ctx.attr_value_make(), productionName);
+        Node returnNode = textAsNode("assignments", stateAssignmentsAndInverseAssignments[0]);
+        if (stateAssignmentsAndInverseAssignments[1].length() == 0) {
+            returnNode.setProperty("hasInverseAssignments", "false");
+        } else {
+            returnNode.setProperty("inverseAssignments", stateAssignmentsAndInverseAssignments[1]);
+            returnNode.setProperty("hasInverseAssignments", "true");
+        }
+
+        return returnNode;
     }
 
-    private String innerVisitAction(String prefix, List<SoarParser.Attr_value_makeContext> ctxs)
+    private String[] innerVisitAction(String prefix, List<SoarParser.Attr_value_makeContext> ctxs, String productionName)
     {
-        Map<String, String[]> stateAssignments = new HashMap<>();
+        Map<String, String> stateAssignments = new HashMap<>();
+        ArrayList<String> operatorCollection = new ArrayList<>();
+        ArrayList<String> inverseOperatorCollection = new ArrayList<>();
 
         for (SoarParser.Attr_value_makeContext attrCtx : ctxs)
         {
@@ -488,54 +628,116 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
             for (SoarParser.Value_makeContext value_makeContext : attrCtx.value_make()) {
                 Node rightSideElement = value_makeContext.accept(this);
-                String[] rightSide = determineAssignment(leftSide, rightSideElement, stateAssignments);
+                String[] rightSide = determineAssignment(leftSide, rightSideElement, stateAssignments, productionName);
 
                 if (rightSide != null)
                 {
-                    stateAssignments.put(leftSide, rightSide);
+                    if (leftSide.equals("state_operator")) {
+                        operatorCollection.add(rightSide[0]);
+                        inverseOperatorCollection.add(rightSide[1]);
+                    } else {
+                        stateAssignments.put(leftSide, rightSide[0]);
+                    }
                 }
             }
         }
-        return stateAssignments.entrySet().stream()
-                .map(e -> simplifiedString(e.getKey()) + " = " + e.getValue()[0])
-                .collect(Collectors.joining(", "));
+
+        StringBuilder stateAssignmentsCollection = new StringBuilder(stateAssignments.entrySet().stream()
+                .map(e -> simplifiedString(e.getKey()) + " = " + e.getValue())
+                .collect(Collectors.joining(", ")));
+
+        StringBuilder inverseStateAssignmentsCollection = new StringBuilder(stateAssignments.entrySet().stream()
+                .map(e -> simplifiedString(e.getKey()) + " =  nil")
+                .collect(Collectors.joining(", ")));
+
+        StringBuilder operatorCollectionString = new StringBuilder(operatorCollection.stream().collect(Collectors.joining(", ")));
+        StringBuilder inverseOperatorCollectionString = new StringBuilder(inverseOperatorCollection.stream().collect(Collectors.joining(", ")));
+
+        stateAssignmentsCollection.append(operatorCollectionString);
+        inverseStateAssignmentsCollection.append(inverseOperatorCollectionString);
+
+        return new String[] {stateAssignmentsCollection.toString(), inverseStateAssignmentsCollection.toString()};
     }
 
-    private String[] determineAssignment(String leftSide, Node rightSideElement, Map<String, String[]> stateAssignments)
+    private String[] determineAssignment(String leftSide, Node rightSideElement, Map<String, String> stateAssignments, String productionName)
     {
+
         if (rightSideElement == null)
         {
             return null;
         }
 
-        String rightSide;
-        String prefs= null;
+        String[] rightSide = new String[2];
+        rightSide[1] = null;
 
         if (rightSideElement.getProperty("const") != null)
         {
-            rightSide = getText(rightSideElement, "const");
+            rightSide[0] = getText(rightSideElement, "const");
         }
         else if (rightSideElement.getProperty("expr") != null)
         {
-            rightSide = getText(rightSideElement, "expr");
+            rightSide[0] = getText(rightSideElement, "expr");
         }
         else if (rightSideElement.getProperty("pref") != null)
         {
-            return null;
+            String operatorIndex = getIndexFromID(getText(rightSideElement, "var"));
+
+            if (getText(rightSideElement, "pref").equals("unary")) {
+                String unaryPrefCollection = getText(rightSideElement, "unaryPrefCollection");
+                String delims = "[,]";
+                String[] tokens = unaryPrefCollection.split(delims);
+                StringBuilder buildRightSide = new StringBuilder();
+                StringBuilder buildInverseRightSide = new StringBuilder();
+
+                for (int i = 0; i < tokens.length; i++) {
+                    if (i != 0) {
+                        buildRightSide.append(", ");
+                    }
+                    buildRightSide.append("operators[");
+                    buildRightSide.append(operatorIndex);
+                    buildRightSide.append("].operator.");
+                    buildRightSide.append(tokens[i]);
+                    buildInverseRightSide.append(buildRightSide);
+                    buildRightSide.append(" = true");
+                    buildInverseRightSide.append(" = false");
+                }
+                rightSide[0] = buildRightSide.toString();
+                rightSide[1] = buildInverseRightSide.toString();
+            } else if (getText(rightSideElement, "pref").equals("binary")){
+                String binaryPref = getText(rightSideElement, "binaryPref");
+                String thatValueID = getIndexFromID(getText(rightSideElement, "secondValue"));
+                if (binaryPref.equals("isBetterTo")) {
+                    rightSide[0] = functionCallWithTwoIDs("addBetterTo", operatorIndex, thatValueID);
+                    rightSide[1] = functionCallWithTwoIDs("removeBetterFrom", operatorIndex, thatValueID);
+                } else if (binaryPref.equals("isUnaryOrBinaryIndifferentTo")) {
+                    rightSide[0] = functionCallWithTwoIDs("addBinaryIndifferentTo", operatorIndex, thatValueID);
+                    rightSide[1] = functionCallWithTwoIDs("removeBinaryIndifferentFrom", operatorIndex, thatValueID);
+                }
+            }
+        } else if (rightSideElement.getProperty("var") != null){
+            String withoutTempVariable = _variableDictionary.get(productionName).get(getText(rightSideElement , "var"));
+            String newTempVariable = withoutTempVariable + "_temp";
+            _globals.add(newTempVariable);
+            stateAssignments.put(newTempVariable, withoutTempVariable);
+            rightSide[0] = newTempVariable;
         } else {
             return null;
         }
 
-        //Ignorming multi-valued attributes right now.  Should look at later when adding them in
+        //Ignoring multi-valued attributes right now.  Should look at later when adding them in
         if (stateAssignments.containsKey(leftSide))
         {
-            String multiValuedAttributes = stateAssignments.get(leftSide)[1];
+            String multiValuedAttributes = stateAssignments.get(leftSide);
             return null;
         }
         else
         {
-            return new String[]{rightSide, prefs};
+            return rightSide;
         }
+    }
+
+    private String functionCallWithTwoIDs (String function, String index1, String index2) {
+        return function + "(" + index1 + "," + index2 + ")";
     }
 
 
@@ -650,6 +852,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return otherOperatorID;
     }
 
+    private String getIndexFromID (String variableName) {
+        return "" + (Integer.parseInt(getID(variableName)) - 1);
+    }
+
     @Override
     public Node visitValue_pref_binary_value(SoarParser.Value_pref_binary_valueContext ctx) {
         Node valuePrefNode = null;
@@ -687,7 +893,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     @Override
     public Node visitUnary_or_binary_pref(SoarParser.Unary_or_binary_prefContext ctx) {
         Node prefNode = null;
-        String isWhat = UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0));
+        String isWhat = UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0), unaryOrBinaryFlag);
         if (isWhat != null) {
             prefNode = textAsNode("unaryBinaryPref", isWhat);
         }
@@ -698,7 +904,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     {
         String preference = null;
         if (ctx.unary_or_binary_pref() != null) {
+            unaryOrBinaryFlag = true;
             preference = getText(ctx.unary_or_binary_pref().accept(this), "unaryBinaryPref");
+            unaryOrBinaryFlag = false;
         } else if (ctx.unary_pref() != null) {
             preference = getText(ctx.unary_pref().accept(this), "unaryPref");
         }
@@ -834,7 +1042,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         makeEdgeWithNails(schedulerTemplate, checkLocation, runLocation, null, null, "Run_Rule!", new Integer[]{24, -152}, null, null, null, null, new Integer[]{56, -128});
 
-        makeEdgeWithNails(schedulerTemplate, runLocation, checkLocation, null, null, null, null, "!(" + getText(_goalProductionContext.condition_side().accept(this), "name") + ")", new Integer[]{-136, -48}, null, null, new Integer[]{128, -72});
+        makeEdgeWithNails(schedulerTemplate, runLocation, checkLocation, null, null, null, null, "!(" + getText(_goalProductionContext.condition_side().accept(this), "guards") + ")", new Integer[]{-136, -48}, null, null, new Integer[]{128, -72});
 
         makeEdge(schedulerTemplate, startLocation, runLocation, null, null, "Run_Rule!", new Integer[]{-288, -96}, null, null, null, null);
         return null;

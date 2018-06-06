@@ -30,6 +30,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private ArrayList<SymbolTree> operators = new ArrayList<>();
     private Map<String, SymbolTree> currentOperators;
     private ArrayList<ArrayList<String>> operatorAttributesAndValues = new ArrayList<>();
+    private boolean unaryOrBinaryFlag = false;
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -571,7 +572,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     @Override
     public SymbolTree visitUnary_or_binary_pref(SoarParser.Unary_or_binary_prefContext ctx) {
-        return new SymbolTree(UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0)));
+        return new SymbolTree(UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0), unaryOrBinaryFlag));
     }
 
     @Override
@@ -584,7 +585,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 returnTree = new SymbolTree(isWhat);
             }
         } else if (ctx.unary_or_binary_pref() != null) {
+            unaryOrBinaryFlag = true;
             String isWhat = ctx.unary_or_binary_pref().accept(this).name;
+            unaryOrBinaryFlag = false;
             if (isWhat != null) {
                 returnTree = new SymbolTree(isWhat);
             }

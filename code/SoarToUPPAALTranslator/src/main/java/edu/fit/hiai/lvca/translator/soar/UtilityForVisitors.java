@@ -2,17 +2,29 @@ package edu.fit.hiai.lvca.translator.soar;
 
 public class UtilityForVisitors {
 
-    public static String unaryOrBinaryToString(char prefChar) {
+    public static String unaryOrBinaryToString(char prefChar, boolean isUnary) {
         String prefString = null;
+        String betterString;
+        String worseString;
+        String unaryOrBinaryIndifferentString;
+        if (isUnary) {
+            betterString = "isBest";
+            worseString = "isWorst";
+            unaryOrBinaryIndifferentString = "isUnaryIndifferent";
+        } else {
+            betterString = "isBetterTo";
+            worseString = "isWorseTo";
+            unaryOrBinaryIndifferentString = "isUnaryOrBinaryIndifferentTo";
+        }
         switch (prefChar) {
             case '>':
-                prefString = "isBetterTo";
+                prefString = betterString;
                 break;
             case '<':
-                prefString = "isWorseTo";
+                prefString = worseString;
                 break;
             case '=':
-                prefString = "isUnaryOrBinaryIndifferentTo";
+                prefString = unaryOrBinaryIndifferentString;
                 break;
             default:
                 break;
@@ -30,12 +42,6 @@ public class UtilityForVisitors {
             case '!': isWhat = "isRequired";
                       break;
             case '~': isWhat = "isProhibited";
-                      break;
-            case '>': isWhat = "isBest";
-                      break;
-            case '<': isWhat = "isWorst";
-                      break;
-            case '=': isWhat = "isUnaryIndifferent";
                       break;
             default: break;
         }
