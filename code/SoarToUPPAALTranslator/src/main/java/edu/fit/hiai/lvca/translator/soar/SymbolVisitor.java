@@ -166,7 +166,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             //fix ???
             SymbolTree operator = currentOperators.get(ctx.id_test().getText());
             SymbolTree attributeValue = childWithChildren.getChildren().get(0);
-            operator.addChild(attributeValue);
+            if (operator != null) {
+                operator.addChild(attributeValue);
+            }
         }
 
         return null;

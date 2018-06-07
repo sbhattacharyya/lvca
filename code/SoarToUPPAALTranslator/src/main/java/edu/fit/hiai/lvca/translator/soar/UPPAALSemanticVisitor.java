@@ -33,6 +33,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private final Set<String> _templateNames = new HashSet<>();
     private boolean unaryOrBinaryFlag = false;
     private boolean learnInverseAssignments = false;
+    private LinkedList<String> extraVariableAssignments;
 
     public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators)
     {
@@ -114,7 +115,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "int required[N];\n" +
                 "int acceptable[N];\n" +
                 "int best[N];\n" +
-                "chan requireTest;\n" +
+                "chan Require_Test;\n" +
                 "BaseOperator defaultOperator = {false, false, false, false, false, false, false, false, 0, 0};\n" +
                 "int defaultOperatorArray[N];\n" +
                 "int numLeft = 0;\n" +
@@ -217,6 +218,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
+    private String addExtraVariableAssignments(String oldAssignments) {
+        StringBuilder returnAssignments = new StringBuilder();
+        int iterateSize = extraVariableAssignments.size();
+        for (int i = 0; i < iterateSize; i++) {
+            if (i != 0) {
+                returnAssignments.append(", ");
+            }
+            returnAssignments.append(extraVariableAssignments.remove());
+        }
+        if (!oldAssignments.equals("")) {
+            returnAssignments.append(", ");
+        }
+        returnAssignments.append(oldAssignments);
+        if (returnAssignments.length() > 0 && returnAssignments.charAt(0) == ',') {
+            returnAssignments.delete(0, 2);
+        }
+        return returnAssignments.toString();
+    }
+
     @Override
     public Node visitSoar_production(SoarParser.Soar_productionContext ctx) {
         if (ctx.getText().contains("(halt)")) {
@@ -235,12 +255,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         currentOperators = _operators.get(OPERATOR_INDEX);
         OPERATOR_INDEX++;
+        extraVariableAssignments = new LinkedList<>();
 
         Node conditionSide = ctx.condition_side().accept(this);
         String guard = getText(conditionSide, "guards");
         String inverseGuard;
 
-        if (getText(conditionSide, "hasInverseGuards").equals("true")) {
+        if (conditionSide.getProperty("inverseGuards") != null) {
             inverseGuard = getText(conditionSide, "inverseGuards");
             learnInverseAssignments = true;
         } else {
@@ -249,10 +270,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
 
         Node actionSide = ctx.action_side().accept(this);
-        String assignment = getText(actionSide, "assignments");
+        String assignment = addExtraVariableAssignments(getText(actionSide, "assignments"));
 
         String inverseAssignment;
-        if (getText(actionSide, "hasInverseAssignments").equals("true")) {
+        if (actionSide.getProperty("inverseAssignments") != null) {
             inverseAssignment = getText(actionSide, "inverseAssignments");
         } else {
             inverseAssignment = null;
@@ -301,9 +322,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     .stream()
                     .filter(g -> g != null && !g.equals(""))
                     .collect(Collectors.joining(" || ")));
-            returnNode.setProperty("hasInverseGuards", "true");
-        } else {
-            returnNode.setProperty("hasInverseGuards", "false");
         }
 
         return returnNode;
@@ -349,6 +367,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return getConditionAndInverseConditionNode(condsAndInverseConds);
     }
 
+    private String determineInverseAssignment(String regularAssignment) {
+        switch (regularAssignment) {
+            case "==": return "!=";
+            case "!=": return "==";
+            case ">": return "<=";
+            case "<": return ">=";
+            default: return "==";
+        }
+    }
+
     private String[] innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest)
     {
         List<String> stateVariableComparisons = new LinkedList<>();
@@ -367,7 +395,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 String leftTerm = variablePath + "_" + attrPath;
 
                 int lengthOfState_Operator = 14;
-                if (leftTerm.length() >= 14 && leftTerm.substring(0, lengthOfState_Operator).equals("state_operator")) {
+                if (leftTerm.length() >= lengthOfState_Operator && leftTerm.substring(0, lengthOfState_Operator).equals("state_operator")) {
                     inverseStateVariableComparisons = null;
                 }
 
@@ -386,60 +414,72 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     {
                         Node relationAndRightTerm = attributeCtx.value_test(0).accept(this);
 
-                        String relation = getText(relationAndRightTerm, "rel");
-                        String inverseRelation = relation == "==" ? "!=" : "==";
+                        if (relationAndRightTerm.getProperty("rel") != null) {
 
-                        String rightTerm;
-                        String inverseRightTerm;
+                            String relation = getText(relationAndRightTerm, "rel");
+                            String inverseRelation = determineInverseAssignment(relation);
 
-                        if (relation.equals("="))
-                        {
-                            relation = "==";
-                            inverseRelation = "!=";
-                        }
+                            String rightTerm;
+                            String inverseRightTerm;
 
-                        if (relationAndRightTerm.getProperty("var") != null)
-                        {
-                            rightTerm = localVariableDictionary.get(getText(relationAndRightTerm,"var"));
-                            inverseRightTerm = rightTerm;
-                            int operatorWordSize = 7;
-                            if (rightTerm.length() > operatorWordSize && !rightTerm.substring(rightTerm.length() - operatorWordSize - 1).equals("operator") && leftTerm.equals(rightTerm)) {
-                                relation = "!=";
-                                rightTerm = "nil";
+                            if (relation.equals("=")) {
+                                relation = "==";
+                                inverseRelation = "!=";
+                            }
+
+                            if (relationAndRightTerm.getProperty("var") != null) {
+                                rightTerm = localVariableDictionary.get(getText(relationAndRightTerm, "var"));
+                                inverseRightTerm = rightTerm;
+                                int operatorWordSize = 7;
+                                if (rightTerm.length() > operatorWordSize && !rightTerm.substring(rightTerm.length() - operatorWordSize - 1).equals("operator") && leftTerm.equals(rightTerm)) {
+                                    relation = "!=";
+                                    rightTerm = "nil";
+                                    if (inverseStateVariableComparisons != null) {
+                                        String withoutTempVariable = localVariableDictionary.get(getText(relationAndRightTerm, "var"));
+                                        String newTempVariable = withoutTempVariable + "_temp";
+                                        _globals.add(newTempVariable);
+                                        inverseRightTerm = newTempVariable;
+                                        extraVariableAssignments.add(simplifiedString(newTempVariable) + " =  " + simplifiedString(withoutTempVariable));
+                                    }
+                                }
+                            } else {
+                                rightTerm = getText(relationAndRightTerm, "const");
+                                inverseRightTerm = rightTerm;
+                            }
+
+                            if (rightTerm == null) {
+                                break;
+                            } else if (rightTerm.equals("true") && relation.equals("==")) {
+                                stateVariableComparisons.add(simplifiedString(leftTerm));
+                            } else if (rightTerm.equals("false") && relation.equals("==")) {
+                                stateVariableComparisons.add("!" + simplifiedString(leftTerm));
+                            } else if (!rightTerm.equals(leftTerm)) {
+                                String simplifiedLeftTerm = simplifiedString(leftTerm);
+                                String simplifiedRightTerm = simplifiedString(rightTerm);
+                                String simplifiedInverseRightTerm = simplifiedString(inverseRightTerm);
+                                stateVariableComparisons.add(simplifiedLeftTerm + " " + relation + " " + simplifiedRightTerm);
                                 if (inverseStateVariableComparisons != null) {
-                                    String withoutTempVariable = localVariableDictionary.get(getText(relationAndRightTerm, "var"));
-                                    String newTempVariable = withoutTempVariable + "_temp";
-                                    _globals.add(newTempVariable);
-                                    inverseRightTerm = newTempVariable;
+                                    inverseStateVariableComparisons.add(simplifiedLeftTerm + " " + inverseRelation + " " + simplifiedInverseRightTerm);
                                 }
                             }
-                        }
-                        else
-                        {
-                            rightTerm = getText(relationAndRightTerm, "const");
-                            inverseRightTerm = rightTerm;
-                        }
-
-                        if (rightTerm == null)
-                        {
-                            break;
-                        }
-                        else if (rightTerm.equals("true") && relation.equals("=="))
-                        {
-                            stateVariableComparisons.add(simplifiedString(leftTerm));
-                        }
-                        else if (rightTerm.equals("false") && relation.equals("=="))
-                        {
-                            stateVariableComparisons.add("!"+simplifiedString(leftTerm));
-                        }
-                        else if (!rightTerm.equals(leftTerm))
-                        {
+                        } else if (relationAndRightTerm.getProperty("disjunction") != null) {
+                            String[] disjunctionCollection = getText(relationAndRightTerm, "disjunction").split(",");
                             String simplifiedLeftTerm = simplifiedString(leftTerm);
-                            String simplifiedRightTerm = simplifiedString(rightTerm);
-                            String simplifiedInverseRightTerm = simplifiedString(inverseRightTerm);
-                            stateVariableComparisons.add(simplifiedLeftTerm + " " + relation + " " + simplifiedRightTerm);
-                            if (inverseStateVariableComparisons != null) {
-                                inverseStateVariableComparisons.add(simplifiedLeftTerm + " " + inverseRelation + " " + simplifiedInverseRightTerm);
+                            StringBuilder disjunctionRelations = new StringBuilder();
+                            disjunctionRelations.append("(");
+                            for (int i = 0; i < disjunctionCollection.length; i++) {
+                                if (i != 0) {
+                                    disjunctionRelations.append(" || ");
+                                }
+                                disjunctionRelations.append(simplifiedLeftTerm);
+                                disjunctionRelations.append(" == ");
+                                disjunctionRelations.append(simplifiedString(disjunctionCollection[i]));
+                            }
+                            disjunctionRelations.append(")");
+                            if (!disjunctionRelations.equals("()")) {
+                                String disjunctionString = disjunctionRelations.toString();
+                                stateVariableComparisons.add(disjunctionString);
+                                inverseStateVariableComparisons.add("!" + disjunctionString);
                             }
                         }
                     }
@@ -521,8 +561,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     @Override
-    public Node visitSimple_test(SoarParser.Simple_testContext ctx) {
-        return ctx.children.get(0).accept(this);
+    public Node visitSimple_test(SoarParser.Simple_testContext ctx) { return ctx.children.get(0).accept(this);
     }
 
     @Override
@@ -532,7 +571,14 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     @Override
     public Node visitDisjunction_test(SoarParser.Disjunction_testContext ctx) {
-        return null;
+        StringBuilder disjunctionCollection = new StringBuilder();
+        for (int i = 0; i < ctx.constant().size(); i++) {
+            if (i != 0) {
+                disjunctionCollection.append(",");
+            }
+            disjunctionCollection.append(getText(ctx.constant(i).accept(this), "const"));
+        }
+        return textAsNode("disjunction", disjunctionCollection.toString());
     }
 
     @Override
@@ -585,9 +631,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         StringBuilder inverseAssignments = new StringBuilder();
         for (SoarParser.ActionContext actionContext : ctx.action()) {
             Node actionNode = actionContext.accept(this);
-            assignments.append(getText(actionNode, "assignments"));
-            assignments.append(", ");
-            if (getText(actionNode, "hasInverseAssignments").equals("true")) {
+            if (!getText(actionNode, "assignments").equals("")) {
+                assignments.append(getText(actionNode, "assignments"));
+                assignments.append(", ");
+            }
+        if (actionNode.getProperty("inverseAssignments") != null) {
                 inverseAssignments.append(getText(actionNode, "inverseAssignments"));
                 inverseAssignments.append(", ");
             }
@@ -603,10 +651,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (inverseAssignments.length() >= 2 && inverseAssignments.charAt(inverseAssignments.length() - 2) == ',') {
                 inverseAssignments.delete(inverseAssignments.length() - 2, inverseAssignments.length());
             }
-            returnNode.setProperty("hasInverseAssignments", "true");
             returnNode.setProperty("inverseAssignments", inverseAssignments.toString());
-        } else {
-            returnNode.setProperty("hasInverseAssignments", "false");
         }
 
         return returnNode;
@@ -620,11 +665,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         String[] stateAssignmentsAndInverseAssignments = innerVisitAction(prefix, ctx.attr_value_make(), productionName);
         Node returnNode = textAsNode("assignments", stateAssignmentsAndInverseAssignments[0]);
-        if (stateAssignmentsAndInverseAssignments[1].length() == 0) {
-            returnNode.setProperty("hasInverseAssignments", "false");
-        } else {
+        if (stateAssignmentsAndInverseAssignments[1].length() != 0) {
             returnNode.setProperty("inverseAssignments", stateAssignmentsAndInverseAssignments[1]);
-            returnNode.setProperty("hasInverseAssignments", "true");
         }
 
         return returnNode;
@@ -648,7 +690,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 Node rightSideElement = value_makeContext.accept(this);
                 String[] rightSide = determineAssignment(leftSide, rightSideElement, stateAssignments, productionName);
 
-                if (rightSide != null)
+                if (rightSide != null && rightSide[0] != null)
                 {
                     if (leftSide.equals("state_operator")) {
                         operatorCollection.add(rightSide[0]);
@@ -772,7 +814,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             String withoutTempVariable = _variableDictionary.get(productionName).get(getText(rightSideElement , "var"));
             String newTempVariable = withoutTempVariable + "_temp";
             _globals.add(newTempVariable);
-            stateAssignments.put(newTempVariable, withoutTempVariable);
             rightSide[0] = newTempVariable;
         } else {
             return null;
@@ -1090,22 +1131,27 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private Element getScheduler()
     {
         String checkId = getCounter();
-        String runId = getCounter();
+        String initId = getCounter();
         String startId = getCounter();
+        String preferenceResolutionId = getCounter();
+        String collectOperatorsId = getCounter();
+        String chooseOperatorId = getCounter();
 
         Template schedulerTemplate = makeTemplate("scheduler");
 
-        Location checkLocation = makeLocationWithCoordinates(schedulerTemplate, "Check", checkId, true, false, 248, -72, 264, -72);
+        Location checkLocation = makeLocationWithCoordinates(schedulerTemplate, "Check", checkId, true, false, 248, -76, 178, -102);
+        Location initLocation = makeLocationWithCoordinates(schedulerTemplate, "Init", initId, true, false, -136, -76, -178, -102);
+        Location startLocation = makeLocationWithCoordinates(schedulerTemplate, "Start", startId, true, true, -365, -76, -416, -102);
+        Location preferenceResolutionLocation = makeLocationWithCoordinates(schedulerTemplate, "PreferenceResolution", preferenceResolutionId, true, false, 238, -195, 228, -229);
+        Location collectOperatorsLocation = makeLocationWithCoordinates(schedulerTemplate, "CollectOperators", collectOperatorsId, true, false, 416, -76, 425, -102);
+        Location chooseOperatorLocation = makeLocationWithCoordinates(schedulerTemplate, "ChooseOperator", chooseOperatorId, true, false, -136, -195, -263, -221);
 
-        Location runLocation = makeLocationWithCoordinates(schedulerTemplate, "Run", runId, true, false, -144, -72, -128, -72);
-
-        Location startLocation = makeLocationWithCoordinates(schedulerTemplate, "Start", startId, false, true, -368, -72, -424, -72);
-
-        makeEdgeWithNails(schedulerTemplate, checkLocation, runLocation, null, null, "Run_Rule!", new Integer[]{24, -152}, null, null, null, null, new Integer[]{56, -128});
-
-        makeEdgeWithNails(schedulerTemplate, runLocation, checkLocation, null, null, null, null, "!(" + getText(_goalProductionContext.condition_side().accept(this), "guards") + ")", new Integer[]{-136, -48}, null, null, new Integer[]{128, -72});
-
-        makeEdge(schedulerTemplate, startLocation, runLocation, null, null, "Run_Rule!", new Integer[]{-288, -96}, null, null, "initialize(operators)", new Integer[]{-331, -68});
+        makeEdge(schedulerTemplate, chooseOperatorLocation, initLocation, null, null, null, null, "finalOp != 0", new Integer[]{-127, -170}, null, null);
+        makeEdge(schedulerTemplate, preferenceResolutionLocation, chooseOperatorLocation, null, null, "Require_Test!", new Integer[]{-8, -221}, null, null, null, null);
+        makeEdgeWithNails(schedulerTemplate, collectOperatorsLocation, preferenceResolutionLocation, null, null, null, null, null, null, "fillOthers(),\nfinalOp = 0", new Integer[]{289, -187}, new Integer[]{416, -195});
+        makeEdge(schedulerTemplate, checkLocation, collectOperatorsLocation, null, null, "Run_Rule!", new Integer[]{289, -102}, null, null, null, null);
+        makeEdge(schedulerTemplate, initLocation, checkLocation, null, null, null, null, "!(" + getText(_goalProductionContext.condition_side().accept(this), "guards") + ")", new Integer[]{-119, -51}, null, null);
+        makeEdge(schedulerTemplate, startLocation, initLocation, null, null, null, null, null, null, "initialize(operators)", new Integer[]{-331, -68});
         return null;
     }
 
@@ -1296,7 +1342,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdgeWithNails(operatorPreferencesTemplate, noName3, done, null, null, null, null, "!operators[currentOp-1].operator.isProhibited", new Integer[]{-2808, -1456}, "finalOp = currentOp", new Integer[]{-2792, -1416}, new Integer[]{-2616, -1424});
         makeEdge(operatorPreferencesTemplate, requireTest, noName3, null, null, null, null, "numLeft == 1", new Integer[]{-3256, -1448}, "currentOp = required[0]", new Integer[]{-3272, -1416});
         makeEdgeWithNails(operatorPreferencesTemplate, requireTest, constraintFailure, null, null, null, null, "numLeft > 1", new Integer[]{-3144, -1552}, null, null, new Integer[]{-3320, -1424, -3264, -1520});
-        makeEdge(operatorPreferencesTemplate, start, requireTest, null, null, "requireTest?", new Integer[]{-3624, -1520}, null, null, "numLeft = getNumLeft(required)", new Integer[]{-3728, -1496});
+        makeEdge(operatorPreferencesTemplate, start, requireTest, null, null, "Require_Test?", new Integer[]{-3624, -1520}, null, null, "numLeft = getNumLeft(required)", new Integer[]{-3728, -1496});
+        makeEdgeWithNails(operatorPreferencesTemplate, done, start, null, null, null, null, null, null, null, null, new Integer[]{-3808, -518, -3808, -1538});
 
         return null;
     }
