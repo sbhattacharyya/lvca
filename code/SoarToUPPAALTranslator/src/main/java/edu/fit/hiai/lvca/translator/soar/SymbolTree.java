@@ -40,7 +40,7 @@ public class SymbolTree
      */
     SymbolTree getSubtree (String treeName)
     {
-        SymbolTree result = getSubtree0(treeName);
+        SymbolTree result = getSubtreeNoError(treeName);
 
         if (result == null)
         {
@@ -54,7 +54,7 @@ public class SymbolTree
      * Recursive companion to above method
      * @return
      */
-    private SymbolTree getSubtree0 (String treeName)
+    public SymbolTree getSubtreeNoError(String treeName)
     {
         if (name.equals(treeName))
         {
@@ -64,7 +64,7 @@ public class SymbolTree
         {
             for (SymbolTree child : children)
             {
-                if (child.getSubtree0(treeName) != null)
+                if (child.getSubtreeNoError(treeName) != null)
                 {
                     return child;
                 }

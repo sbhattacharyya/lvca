@@ -10,9 +10,6 @@ import org.apache.commons.cli.*;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
@@ -96,6 +93,91 @@ public class SoarTranslator
         }
     }
 
+    public static boolean compareUpdateToCreate(SymbolTree update, SymbolTree create) {
+        for (SymbolTree attributeTree : update.getChildren()) {
+            if (attributeTree.name.equals("update")) {
+                continue;
+            }
+            SymbolTree otherChildSubtree = create.getSubtreeNoError(attributeTree.name);
+            if (otherChildSubtree == null) {
+                return false;
+            } else {
+                for (SymbolTree topValueTree : attributeTree.getChildren()) {
+                    SymbolTree searchSourceOther = otherChildSubtree.getSubtreeNoError(topValueTree.name);
+                    if (searchSourceOther == null) {
+                        return false;
+                    }
+                    for (SymbolTree bottomValueTree : topValueTree.getChildren()) {
+                        if (searchSourceOther.getSubtreeNoError(bottomValueTree.name) == null) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    private static void expandOperators(ArrayList<SymbolTree> operators, SymbolVisitor sv) {
+        SymbolTree createOperators = new SymbolTree("create");
+        SymbolTree updateOperators = new SymbolTree("update");
+        for (SymbolTree productionTree : operators) {
+            for (SymbolTree operatorTree : productionTree.getChildren()) {
+                if (operatorTree.getSubtreeNoError("create") != null) {
+                    createOperators.addChild(operatorTree);
+                } else {
+                    SymbolTree updateChild = operatorTree.getSubtreeNoError("update");
+                    if (updateChild != null && updateChild.getChildren().size() != 0) {
+                        updateOperators.addChild(operatorTree);
+                    }
+                    SymbolTree replaceAttributesWithNumbers = new SymbolTree("replace");
+                    for (int i = 0; i < operatorTree.getChildren().size(); i++) {
+                        if (!operatorTree.getChildren().get(i).name.equals("update")) {
+                            int attributeIndex = sv.getAttributeIndex(operatorTree.getChildren().get(i).name);
+                            for (SymbolTree valueTree : operatorTree.getChildren().get(i).getChildren()) {
+                                if (valueTree.name.charAt(0) != '[') {
+                                    replaceAttributesWithNumbers.addChild(sv.createAttributeValuePair(attributeIndex, sv.getValueIndex(valueTree.name, attributeIndex)));
+                                }
+                            }
+                            operatorTree.getChildren().remove(i);
+                        }
+                    }
+                    for (SymbolTree replaceTree : replaceAttributesWithNumbers.getChildren()) {
+                        operatorTree.addChild(replaceTree);
+                    }
+                }
+            }
+        }
+        boolean keepUpdating = true;
+        while (keepUpdating) {
+            keepUpdating = false;
+            for (SymbolTree baseUpdate : updateOperators.getChildren()) {
+                for (SymbolTree baseCreate : createOperators.getChildren()) {
+                    if (compareUpdateToCreate(baseUpdate, baseCreate)) {
+                        SymbolTree updateBranch = baseUpdate.getSubtree("update");
+                        for (SymbolTree baseValueUpdate : updateBranch.getChildren()) {
+                            SymbolTree baseValueCreate = baseCreate.getSubtreeNoError(baseValueUpdate.name);
+                            if (baseValueCreate == null) {
+                                baseValueCreate = new SymbolTree(baseValueUpdate.name);
+                                baseCreate.addChild(baseValueCreate);
+                                keepUpdating = true;
+                            } else {
+                                for (SymbolTree lowerValueUpdate : baseValueUpdate.getChildren()) {
+                                    SymbolTree lowerValueCreate = baseValueCreate.getSubtreeNoError(lowerValueUpdate.name);
+                                    if (lowerValueCreate == null) {
+                                        lowerValueCreate = new SymbolTree(lowerValueUpdate.name);
+                                        baseValueCreate.addChild(lowerValueCreate);
+                                        keepUpdating = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Using two visitors, a symbol visitor and a semantic visitor, translate Soar to Uppaal. The Symbol visitor
      * associates soar variables, e.g. <o> <s>, with attributes in the working memory tree.  All attributes, values and
@@ -113,7 +195,7 @@ public class SoarTranslator
         Set<String> boolAttributeNames = symbolVisitor.getBooleanSymbols();
         ArrayList<SymbolTree> operators = symbolVisitor.getOperators();
         ArrayList<ArrayList<String>> operatorsAttributesAndValues = symbolVisitor.getOperatorAttributesAndValues();
-        int numOperators = symbolVisitor.getOPERATORID();
+        int numOperators = symbolVisitor.getOPERATOR_ID();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
 
@@ -124,8 +206,8 @@ public class SoarTranslator
                 .map(name -> name.replace("-", "_"))
                 .collect(Collectors.toSet());
 
-//        UPPAALCreator uppaalCreator = new UPPAALCreator(stringAttributeNames, soarParseTree.soar(), variablesPerProductionContext, boolAttributeNames);
-//        return uppaalCreator.getXML();
+        expandOperators(operators, symbolVisitor);
+
         soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators, numOperators));
     }
 
