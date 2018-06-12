@@ -8,9 +8,7 @@ import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.RuleNode;
 import org.antlr.v4.runtime.tree.TerminalNode;
-import sun.awt.Symbol;
 
-import javax.rmi.CORBA.Util;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,6 +19,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     static final int SIZE_OF_TEXT = 16;
     static final String LITERAL_STRING_PREFIX = "literal_string__";
     private final Set<String> _globals;
+    private HashMap<String, Integer> globalToIndex;
     private final Set<String> _booleanGlobals;
     private final ArrayList<SymbolTree> _operators;
     private SymbolTree currentOperators;
@@ -35,13 +34,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private boolean unaryOrBinaryFlag = false;
     private boolean learnInverseAssignments = false;
     private LinkedList<String> extraVariableAssignments;
+    private ArrayList<ArrayList<String>> _operatorsAttributesAndValues;
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators) {
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators, ArrayList<ArrayList<String>> operatorsAttributesAndValues) {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
         _operators = operators;
         NUM_OPERATORS = numOperators;
+        _operatorsAttributesAndValues = operatorsAttributesAndValues;
+        fillGlobalToIndex();
+    }
+
+    private void fillGlobalToIndex() {
+        globalToIndex = new HashMap<>();
+        final AtomicInteger i = new AtomicInteger(1);
+        for (String variable : _globals) {
+            globalToIndex.put(variable, i.getAndIncrement());
+        }
+        globalToIndex.put("LATEST_NUM", i.intValue());
     }
 
     private String getCounter() {
@@ -54,19 +65,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return str.replace("-", "_").replace("*", "_");
     }
 
-    private void getDeclarationElement() {
+    private HashMap<String, Attribute_Value_Wrapper> getDeclarationElement() {
+        HashMap<String, Attribute_Value_Wrapper> attributeToTemplate  = new HashMap<>();
+
         _globals.remove("nil"); // added later so that nil always equals 0
 
         String vars = "";
 
-        final AtomicInteger i = new AtomicInteger(1);
 
-        vars += _globals
-                .stream()
-                .filter(var -> var.startsWith("state"))
-                .map(this::simplifiedString)
-                .map(var -> "int " + var + "; \n")
-                .collect(Collectors.joining());
+//        vars += _globals
+//                .stream()
+//                .filter(var -> var.startsWith("state"))
+//                .map(this::simplifiedString)
+//                .map(var -> "int " + var + "; \n")
+//                .collect(Collectors.joining());
 
         vars += _booleanGlobals
                 .stream()
@@ -76,16 +88,46 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         vars += "const int nil = 0;\n";
 
-        vars += _globals
-                .stream()
-                .filter(var -> !var.startsWith("state"))
-                .map(this::simplifiedString)
-                .map(var -> "const int " + var + " = " + i.getAndIncrement() + "; \n")
-                .collect(Collectors.joining());
+        StringBuilder globalVariables = new StringBuilder();
+        for (String variable : _globals) {
+            String refinedVariable = simplifiedString(variable);
+            int variableIndex = globalToIndex.get(variable);
+            globalVariables.append("const int ");
+            globalVariables.append(refinedVariable);
+            globalVariables.append(" = ");
+            globalVariables.append(variableIndex);
+            globalVariables.append("; \n");
+            if (variable.startsWith("state_operator")) {
+                for (SymbolTree productionTree : _operators) {
+                    for (SymbolTree operatorTree : productionTree.getChildren()) {
+                        if (operatorTree.getSubtreeNoError("create") != null) {
+                            LinkedList<SymbolTree> values = operatorTree.DFSForAttributeValues();
+                            for (SymbolTree child : values) {
+                                String test = "state_operator_" + _operatorsAttributesAndValues.get(Integer.parseInt(child.name.substring(1))).get(0);
+                                if (test.equals(variable)) {
+                                    int valueSize = child.getChildren().size();
+                                    int operatorID = operatorTree.getIDFromTree();
+                                    String newVariableName = variable + "_" + operatorID;
+                                    attributeToTemplate.put(newVariableName, new Attribute_Value_Wrapper(valueSize, variableIndex, operatorID));
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                attributeToTemplate.put(variable, new Attribute_Value_Wrapper(-1, variableIndex, -1));
+            }
+        }
+        vars += globalVariables.toString();
+
+//        vars += _globals
+//                .stream()
+//                .map(this::simplifiedString)
+//                .map(var -> "const int " + var + " = " + i.getAndIncrement() + "; \n")
+//                .collect(Collectors.joining());
 
         vars += "chan Go_I_Support;\n" +
                 "broadcast chan I_Support;\n" +
-                "chan Go_Require_Test;\n" +
                 "chan Continue_Run;\n" +
                 "chan Require_Test;\n" +
                 "chan Go_O_Support;\n" +
@@ -93,7 +135,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "chan Go_Retract;\n" +
                 "broadcast chan Retract;\n" +
                 "int numRetracts;\n" +
-                "bool isRetracting;";
+                "bool isRetracting;\n" +
+                "bool addOperator;\n" +
+                "int doesContain;\n" +
+                "int addOp;\n" +
+                "int tempValue;\n" +
+                "int tempAttribute;";
 
 
         vars += "\n" +
@@ -153,6 +200,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "\t}\n" +
                 "}\n" +
                 "\n" +
+                "void clearFill(int &ref[N]) {\n" +
+                "\tint i = 0;\n" +
+                "\twhile(i < N && ref[i] != 0) {\n" +
+                "\t\tref[i] = 0;\n" +
+                "\t}\n" +
+                "}" +
+                "\n" +
                 "void fillOthers() {\n" +
                 "\tint i = 0;\n" +
                 "\tint requiredIndex = 0;\n" +
@@ -173,6 +227,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "\t\t}\n" +
                 "\t}\n" +
                 "}" +
+                "\n" +
                 "void addBetterTo(int index1, int index2) {\n" +
                 "\tint nextIndex = operators[index1].betterIndex;\n" +
                 "\toperators[index1].betterIndex++;\n" +
@@ -187,6 +242,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
 
         ourDocument.setProperty("declaration", vars);
+
+        return attributeToTemplate;
     }
 
     private void getSystemElement() {
@@ -197,11 +254,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         system += "start = Init();\n" +
                 "iSupport = Run_I_Support();\n" +
                 "oSupport = Run_O_Support();\n" +
-                "runPreferences = Run_Preferences();\n " +
                 "retraction = Run_Retract();\n";
         system += "goal = " + goalTemplateName + "(); \n";
         system += "preferenceResolution = preferenceResolutionTemplate(); \n";
-        system += "system " + compoundNames.stream().map(cName -> cName[0]).collect(Collectors.joining(", ")) + ", goal, start, iSupport, oSupport, runPreferences, retraction, preferenceResolution;";
+        system += "system " + compoundNames.stream().map(cName -> cName[0]).collect(Collectors.joining(", ")) + ", goal, start, iSupport, oSupport, retraction, preferenceResolution;";
 
         ourDocument.setProperty("system", system);
     }
@@ -211,7 +267,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         ctx.soar_production().forEach(sp -> sp.accept(this));
 
-        getDeclarationElement();
+        HashMap<String, Attribute_Value_Wrapper> attributeToTemplate = getDeclarationElement();
 
         getScheduler();
 
@@ -480,6 +536,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                                         String withoutTempVariable = localVariableDictionary.get(getText(relationAndRightTerm, "var"));
                                         String newTempVariable = withoutTempVariable + "_temp";
                                         _globals.add(newTempVariable);
+                                        int globalIndex = globalToIndex.get("LATEST_NUM");
+                                        globalToIndex.put(newTempVariable, globalIndex);
+                                        globalToIndex.put("LATEST_NUM", globalIndex++);
                                         inverseRightTerm = newTempVariable;
                                         extraVariableAssignments.add(simplifiedString(newTempVariable) + " =  " + simplifiedString(withoutTempVariable));
                                     }
@@ -853,6 +912,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             String withoutTempVariable = _variableDictionary.get(productionName).get(getText(rightSideElement, "var"));
             String newTempVariable = withoutTempVariable + "_temp";
             _globals.add(newTempVariable);
+            int globalIndex = globalToIndex.get("LATEST_NUM");
+            globalToIndex.put(newTempVariable, globalIndex);
+            globalToIndex.put("LATEST_NUM", globalIndex++);
             rightSide[0] = newTempVariable;
         } else {
             return null;
@@ -948,7 +1010,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     Integer.parseInt(getText(valuePrefBinaryValue, "secondValue"));
                 } catch (NumberFormatException e) {
                     String replaceVariable = getText(valuePrefBinaryValue, "secondValue");
-                    valuePrefBinaryValue.setProperty("secondValue", getID(getText(value, "var")));
+                    valuePrefBinaryValue.setProperty("secondValue", getIDFromProperty(getText(value, "var")));
                     value.setProperty("var", replaceVariable);
                 }
 
@@ -977,14 +1039,14 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return preferences.toString();
     }
 
-    private String getID(String variableName) {
+    private String getIDFromProperty(String variableName) {
         SymbolTree otherOperator = currentOperators.getSubtree(variableName);
         String otherOperatorID = otherOperator.getSubtree("create").getSubtree("id").getChildren().get(0).name;
         return otherOperatorID;
     }
 
     private String getIndexFromID(String variableName) {
-        return "" + (Integer.parseInt(getID(variableName)) - 1);
+        return "" + (Integer.parseInt(getIDFromProperty(variableName)) - 1);
     }
 
     @Override
@@ -1001,7 +1063,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 unaryOrBinaryPref.setProperty("unaryBinaryPref", "isBetterTo");
                 secondValueProperty = getText(secondValue, "var");
             } else {
-                String otherOperatorID = getID(getText(secondValue, "var"));
+                String otherOperatorID = getIDFromProperty(getText(secondValue, "var"));
                 secondValueProperty = otherOperatorID;
             }
 
@@ -1159,31 +1221,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private Element getScheduler() {
         getInitScheduler();
         getRunISupportScheduler();
-        getRunPreferencesScheduler();
         getRunOSupportScheduler();
         getRetractionScheduler();
-//        String checkId = getCounter();
-//        String initId = getCounter();
-//        String startId = getCounter();
-//        String preferenceResolutionId = getCounter();
-//        String collectOperatorsId = getCounter();
-//        String chooseOperatorId = getCounter();
-//
-//        Template schedulerTemplate = makeTemplate("scheduler");
-//
-//        Location checkLocation = makeLocationWithCoordinates(schedulerTemplate, "Check", checkId, true, false, 248, -76, 178, -102);
-//        Location initLocation = makeLocationWithCoordinates(schedulerTemplate, "Init", initId, true, false, -136, -76, -178, -102);
-//        Location startLocation = makeLocationWithCoordinates(schedulerTemplate, "Start", startId, true, true, -365, -76, -416, -102);
-//        Location preferenceResolutionLocation = makeLocationWithCoordinates(schedulerTemplate, "PreferenceResolution", preferenceResolutionId, true, false, 238, -195, 228, -229);
-//        Location collectOperatorsLocation = makeLocationWithCoordinates(schedulerTemplate, "CollectOperators", collectOperatorsId, true, false, 416, -76, 425, -102);
-//        Location chooseOperatorLocation = makeLocationWithCoordinates(schedulerTemplate, "ChooseOperator", chooseOperatorId, true, false, -136, -195, -263, -221);
-//
-//        makeEdge(schedulerTemplate, chooseOperatorLocation, initLocation, null, null, null, null, "finalOp != 0", new Integer[]{-127, -170}, null, null);
-//        makeEdge(schedulerTemplate, preferenceResolutionLocation, chooseOperatorLocation, null, null, "Require_Test!", new Integer[]{-8, -221}, null, null, null, null);
-//        makeEdgeWithNails(schedulerTemplate, collectOperatorsLocation, preferenceResolutionLocation, null, null, null, null, null, null, "fillOthers(),\nfinalOp = 0", new Integer[]{289, -187}, new Integer[]{416, -195});
-//        makeEdge(schedulerTemplate, checkLocation, collectOperatorsLocation, null, null, "Run_Rule!", new Integer[]{289, -102}, null, null, null, null);
-//        makeEdge(schedulerTemplate, initLocation, checkLocation, null, null, null, null, "!(" + getText(_goalProductionContext.condition_side().accept(this), "guards") + ")", new Integer[]{-119, -51}, null, null);
-//        makeEdge(schedulerTemplate, startLocation, initLocation, null, null, null, null, null, null, "initialize(operators)", new Integer[]{-331, -68});
+        getAttributeValueTemplate();
         return null;
     }
 
@@ -1222,27 +1262,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         makeEdgeWithNails(runISupportScheduler, preferenceResolutionLocation, callISupportLocation, null, null, null, null, "numRetracts > 0 && isRetracting == false", new Integer[]{76, -110}, "numRetracts = 0", new Integer[]{76, -93}, new Integer[]{459, -119, -85, -119});
         makeEdgeWithNails(runISupportScheduler, backToBeginningLocation, callISupportLocation, null, null, "Continue_Run?", new Integer[]{-68, 51}, null, null, "numRetracts = 0", new Integer[]{-68, 85}, new Integer[]{-85, 76});
-        makeEdge(runISupportScheduler, preferenceResolutionLocation, backToBeginningLocation, null, null, "Go_Require_Test!", new Integer[]{467, 17}, "numRetracts == 0 && isRetracting == false", new Integer[]{467, 34}, null, null);
+        makeEdge(runISupportScheduler, preferenceResolutionLocation, backToBeginningLocation, null, null, "Require_Test!", new Integer[]{467, 17}, "numRetracts == 0 && isRetracting == false", new Integer[]{467, 34}, null, null);
         makeEdge(runISupportScheduler, collectOperatorsLocation, preferenceResolutionLocation, null, null, "Go_Retract!", new Integer[]{307, -17}, null, null, "fillOthers(),\nfinalOp = 0,\nisRetracting = true", new Integer[]{306, 8});
-        makeEdge(runISupportScheduler, callISupportLocation, collectOperatorsLocation, null, null, "I_Support!", new Integer[]{59, -25}, getText(_goalProductionContext.condition_side().accept(this), "inverseGuards"), new Integer[]{-68, 8}, null, null);
+        makeEdge(runISupportScheduler, callISupportLocation, collectOperatorsLocation, null, null, "I_Support!", new Integer[]{59, -25}, getText(_goalProductionContext.condition_side().accept(this), "inverseGuards"), new Integer[]{-68, 8}, "clearFill(required),\nclearFill(acceptable),\nclearFill(best)", new Integer[]{119, 8});
         makeEdge(runISupportScheduler, startLocation, callISupportLocation, null, null, "Go_I_Support?", new Integer[]{-246, -17}, null, null, null, null);
 
         return runISupportScheduler;
-    }
-
-    private Element getRunPreferencesScheduler() {
-        String startId = getCounter();
-        String runTestId = getCounter();
-
-        Template runPreferencesScheduler = makeTemplate("Run_Preferences");
-
-        Location startLocation = makeLocationWithCoordinates(runPreferencesScheduler, "Start", startId, true, true, -756, -136, -766, -170);
-        Location runTestLocation = makeLocationWithCoordinates(runPreferencesScheduler, "Run_Test", runTestId, true, false, -510, -136, -520, -170);
-
-        makeEdgeWithNails(runPreferencesScheduler, runTestLocation, startLocation, null, null, "Require_Test!", new Integer[]{-680, -68}, null, null, null, null, new Integer[]{-637, -68});
-        makeEdge(runPreferencesScheduler, startLocation, runTestLocation, null, null, "Go_Require_Test?", new Integer[]{-697, -161}, null, null, null, null);
-
-        return runPreferencesScheduler;
     }
 
     private Element getRunOSupportScheduler() {
@@ -1282,6 +1307,39 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdge(retractionScheduler, startLocation, callRetractLocation, null, null, "Go_Retract?", new Integer[]{-263, -68}, null, null, null, null);
 
         return retractionScheduler;
+    }
+
+    private Element getAttributeValueTemplate() {
+        String startId = getCounter();
+
+        Template attributeValueTemplate = makeTemplate("Attribute_Value");
+        attributeValueTemplate.setProperty("parameter", "const int NUM_VALUES, const int ATTRIBUTE_INDEX, const int OPERATOR_ID");
+        attributeValueTemplate.setProperty("declaration",
+                "int values[NUM_VALUES];\n" +
+                "int valuesIndex = 0;\n" +
+                "\n" +
+                "void addValue() {\n" +
+                "\tvalues[valuesIndex] = tempValue;\n" +
+                "\tvaluesIndex++;\n" +
+                "\taddOperator = false;\n" +
+                "}\n" +
+                "\n" +
+                "int doValuesContain() {\n" +
+                "\tint i = 0;\n" +
+                "\tfor (i = 0; i < valuesIndex; i++) {\n" +
+                "\t\tif (values[i] == tempValue) {\n" +
+                "\t\t\treturn 1;\n" +
+                "\t\t}\n" +
+                "\t}\n" +
+                "\treturn -1;\n" +
+                "}");
+
+        Location startLocation = makeLocationWithCoordinates(attributeValueTemplate, "Start", startId, true, true, -739, -195, -756, -229);
+
+        makeEdgeWithNails(attributeValueTemplate, startLocation, startLocation, null, null, null, null, "doesContain == 0 &&\nfinalOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-1071, -204}, "doesContain = doValuesContain()", new Integer[]{-1071, -153}, new Integer[]{-739, -144, -807, -144, -807, -195});
+        makeEdgeWithNails(attributeValueTemplate, startLocation, startLocation, null, null, null, null, "addOperator &&\naddOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-663, -204}, "addValue()", new Integer[]{-663, -153}, new Integer[]{-739, -144, -671, -144, -671, -195});
+
+        return attributeValueTemplate;
     }
 
     private Element getOperatorPreferences() {

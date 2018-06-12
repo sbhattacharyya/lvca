@@ -11,6 +11,7 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -114,14 +115,20 @@ public class SoarTranslator
     }
 
     private static void replaceAttributeValuesWithIndexes(SymbolTree operatorTree, SymbolVisitor sv) {
+        LinkedList<Integer> removeList = new LinkedList<>();
         for (int i = 0; i < operatorTree.getChildren().size(); i++) {
             SymbolTree topValue = operatorTree.getChildren().get(i);
             if (!topValue.name.equals("update") && topValue.name.charAt(0) != '[') {
                 for (SymbolTree valueTree : topValue.getChildren()) {
                     sv.createAttributeValuePair(topValue.name, valueTree.name, operatorTree);
                 }
-                operatorTree.getChildren().remove(i);
+                removeList.add(i);
             }
+        }
+        int decrementIndexes = 0;
+        while(removeList.size() != 0) {
+            operatorTree.getChildren().remove(removeList.poll() - decrementIndexes);
+            decrementIndexes++;
         }
     }
 
@@ -152,6 +159,7 @@ public class SoarTranslator
             }
         }
         boolean keepUpdating[] = new boolean[1];
+        keepUpdating[0] = true;
         while (keepUpdating[0]) {
             keepUpdating[0] = false;
             for (SymbolTree baseUpdate : updateOperators.getChildren()) {
@@ -200,7 +208,7 @@ public class SoarTranslator
 
         expandOperators(operators, symbolVisitor);
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators, numOperators));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators, numOperators, operatorsAttributesAndValues));
     }
 
     /**

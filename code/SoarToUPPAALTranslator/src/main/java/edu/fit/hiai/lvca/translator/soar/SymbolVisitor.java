@@ -475,9 +475,16 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                         rightHandTree.addChild(createBranch);
                         currentOperators.put(rightHandTree.name, rightHandTree);
                     } else {
-                        SymbolTree operator = currentOperators.get(rightHandTree.name);
-                        for (SymbolTree rightHandChild : rightHandTree.getChildren()) {
-                            operator.addChild(rightHandChild);
+                        SymbolTree operatorTree  = currentOperators.get(rightHandTree.name);
+                        if (operatorTree.pathTo("update") == null) {
+                            for (SymbolTree attribute : rightHandTree.getChildren()) {
+                                operatorTree.addChild(attribute);
+                            }
+                        } else {
+                            SymbolTree updateTree = operatorTree.getSubtree("update");
+                            for (SymbolTree attribute : rightHandTree.getChildren()) {
+                                updateTree.addChild(attribute);
+                            }
                         }
                     }
                     rightHandTree = null;

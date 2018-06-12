@@ -157,6 +157,32 @@ public class SymbolTree
         }
     }
 
+    public int getIDFromTree() {
+        SymbolTree createBranch = getSubtreeNoError("id");
+        if (createBranch == null) {
+            return -1;
+        } else {
+            return Integer.parseInt(createBranch.getChildren().get(0).getChildren().get(0).name);
+        }
+    }
+
+    private void DFSForAttributeValuesUtiliy(LinkedList<SymbolTree> dfsCollection, SymbolTree currentTree) {
+        for (SymbolTree child : currentTree.getChildren()) {
+            if (child.getChildren().size() != 0 && !child.name.equals("create")) {
+                DFSForAttributeValuesUtiliy(dfsCollection, child);
+            }
+        }
+        if (currentTree.name.charAt(0) == '[') {
+            dfsCollection.add(currentTree);
+        }
+    }
+
+    public LinkedList<SymbolTree> DFSForAttributeValues() {
+        LinkedList<SymbolTree> dfsCollection = new LinkedList<>();
+        DFSForAttributeValuesUtiliy(dfsCollection, this);
+        return dfsCollection;
+    }
+
     List<SymbolTree> getChildren()
     {
         return children;
