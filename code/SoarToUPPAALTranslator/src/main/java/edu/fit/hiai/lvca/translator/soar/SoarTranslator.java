@@ -93,7 +93,7 @@ public class SoarTranslator
         }
     }
 
-    public static boolean compareUpdateToCreate(SymbolTree update, SymbolTree create) {
+    private static boolean compareUpdateToCreate(SymbolTree update, SymbolTree create) {
         for (SymbolTree attributeTree : update.getChildren()) {
             if (attributeTree.name.equals("update")) {
                 continue;
@@ -102,20 +102,37 @@ public class SoarTranslator
             if (otherChildSubtree == null) {
                 return false;
             } else {
-                for (SymbolTree topValueTree : attributeTree.getChildren()) {
-                    SymbolTree searchSourceOther = otherChildSubtree.getSubtreeNoError(topValueTree.name);
+                for (SymbolTree valueTree : attributeTree.getChildren()) {
+                    SymbolTree searchSourceOther = otherChildSubtree.getSubtreeNoError(valueTree.name);
                     if (searchSourceOther == null) {
                         return false;
-                    }
-                    for (SymbolTree bottomValueTree : topValueTree.getChildren()) {
-                        if (searchSourceOther.getSubtreeNoError(bottomValueTree.name) == null) {
-                            return false;
-                        }
                     }
                 }
             }
         }
         return true;
+    }
+
+    private static void replaceAttributeValuesWithIndexes(SymbolTree operatorTree, SymbolVisitor sv) {
+        for (int i = 0; i < operatorTree.getChildren().size(); i++) {
+            SymbolTree topValue = operatorTree.getChildren().get(i);
+            if (!topValue.name.equals("update") && topValue.name.charAt(0) != '[') {
+                for (SymbolTree valueTree : topValue.getChildren()) {
+                    sv.createAttributeValuePair(topValue.name, valueTree.name, operatorTree);
+                }
+                operatorTree.getChildren().remove(i);
+            }
+        }
+    }
+
+    private static SymbolTree checkCreateContinue(String name, SymbolTree base, boolean continueLoop[]) {
+        SymbolTree checkIfExists = base.getSubtreeNoError(name);
+        if (checkIfExists == null) {
+            checkIfExists = new SymbolTree(name);
+            base.addChild(checkIfExists);
+            continueLoop[0] = true;
+        }
+        return checkIfExists;
     }
 
     private static void expandOperators(ArrayList<SymbolTree> operators, SymbolVisitor sv) {
@@ -130,46 +147,21 @@ public class SoarTranslator
                     if (updateChild != null && updateChild.getChildren().size() != 0) {
                         updateOperators.addChild(operatorTree);
                     }
-                    SymbolTree replaceAttributesWithNumbers = new SymbolTree("replace");
-                    for (int i = 0; i < operatorTree.getChildren().size(); i++) {
-                        if (!operatorTree.getChildren().get(i).name.equals("update")) {
-                            int attributeIndex = sv.getAttributeIndex(operatorTree.getChildren().get(i).name);
-                            for (SymbolTree valueTree : operatorTree.getChildren().get(i).getChildren()) {
-                                if (valueTree.name.charAt(0) != '[') {
-                                    replaceAttributesWithNumbers.addChild(sv.createAttributeValuePair(attributeIndex, sv.getValueIndex(valueTree.name, attributeIndex)));
-                                }
-                            }
-                            operatorTree.getChildren().remove(i);
-                        }
-                    }
-                    for (SymbolTree replaceTree : replaceAttributesWithNumbers.getChildren()) {
-                        operatorTree.addChild(replaceTree);
-                    }
+                    replaceAttributeValuesWithIndexes(operatorTree, sv);
                 }
             }
         }
-        boolean keepUpdating = true;
-        while (keepUpdating) {
-            keepUpdating = false;
+        boolean keepUpdating[] = new boolean[1];
+        while (keepUpdating[0]) {
+            keepUpdating[0] = false;
             for (SymbolTree baseUpdate : updateOperators.getChildren()) {
                 for (SymbolTree baseCreate : createOperators.getChildren()) {
                     if (compareUpdateToCreate(baseUpdate, baseCreate)) {
                         SymbolTree updateBranch = baseUpdate.getSubtree("update");
                         for (SymbolTree baseValueUpdate : updateBranch.getChildren()) {
-                            SymbolTree baseValueCreate = baseCreate.getSubtreeNoError(baseValueUpdate.name);
-                            if (baseValueCreate == null) {
-                                baseValueCreate = new SymbolTree(baseValueUpdate.name);
-                                baseCreate.addChild(baseValueCreate);
-                                keepUpdating = true;
-                            } else {
-                                for (SymbolTree lowerValueUpdate : baseValueUpdate.getChildren()) {
-                                    SymbolTree lowerValueCreate = baseValueCreate.getSubtreeNoError(lowerValueUpdate.name);
-                                    if (lowerValueCreate == null) {
-                                        lowerValueCreate = new SymbolTree(lowerValueUpdate.name);
-                                        baseValueCreate.addChild(lowerValueCreate);
-                                        keepUpdating = true;
-                                    }
-                                }
+                            SymbolTree baseValueCreate = checkCreateContinue(baseValueUpdate.name, baseCreate, keepUpdating);
+                            for (SymbolTree lowerValueUpdate : baseValueUpdate.getChildren()) {
+                                checkCreateContinue(lowerValueUpdate.name, baseValueCreate, keepUpdating);
                             }
                         }
                     }

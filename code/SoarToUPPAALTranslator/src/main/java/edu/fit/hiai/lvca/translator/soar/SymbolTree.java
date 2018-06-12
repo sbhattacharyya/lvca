@@ -73,6 +73,26 @@ public class SymbolTree
         return null;
     }
 
+    public SymbolTree getSubtreeIgnoreUpdateAndCreate(String treeName) {
+        if (name.equals(treeName))
+        {
+            return this;
+        }
+        else
+        {
+            for (SymbolTree child : children)
+            {
+                if (child.name.equals("update") || child.name.equals("create")) {
+                    continue;
+                } else if (child.getSubtreeNoError(treeName) != null)
+                {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * Give a underscore delimited string of parents to the first child of the given name, like a file path.
      *

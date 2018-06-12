@@ -316,7 +316,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return new SymbolTree(result);
     }
 
-    public int getAttributeIndex(String rootName) {
+    private int findAttributeIndex(String rootName) {
         int attributeIndex = -1;
         for (int i = 0; i < operatorAttributesAndValues.size(); i++) {
             if (operatorAttributesAndValues.get(i).get(0).equals(rootName)) {
@@ -324,6 +324,11 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 break;
             }
         }
+        return attributeIndex;
+    }
+
+    private int getAttributeIndex(String rootName) {
+        int attributeIndex = findAttributeIndex(rootName);
         if (attributeIndex == -1) {
             ArrayList<String> newest = new ArrayList<>();
             newest.add(rootName);
@@ -333,7 +338,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return attributeIndex;
     }
 
-    public int getValueIndex(String value, int attributeIndex) {
+    private int findValueIndex(String value, int attributeIndex) {
         int valueIndex = -1;
         ArrayList<String> values = operatorAttributesAndValues.get(attributeIndex);
         for (int i = 1; i < values.size(); i++) {
@@ -345,8 +350,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return valueIndex;
     }
 
-    public int addValueToAttribute(int attributeIndex, String value) {
-        int valueIndex = getValueIndex(value, attributeIndex);
+    private int getValueIndex(String value, int attributeIndex) {
+        int valueIndex = findValueIndex(value, attributeIndex);
         if (valueIndex == -1) {
             operatorAttributesAndValues.get(attributeIndex).add(value);
             valueIndex = operatorAttributesAndValues.get(attributeIndex).size() - 1;
@@ -354,10 +359,20 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return valueIndex;
     }
 
-    public SymbolTree createAttributeValuePair(int attributeIndex, int valueIndex) {
-        SymbolTree attributeTree = new SymbolTree("[" + attributeIndex);
-        attributeTree.addChild(new SymbolTree(valueIndex + "]"));
-        return attributeTree;
+    public void createAttributeValuePair(String attributeName, String valueName, SymbolTree operator) {
+        int attributeIndex = getAttributeIndex(attributeName);
+        int valueIndex = getValueIndex(valueName, attributeIndex);
+        SymbolTree attributeTree = operator.getSubtreeIgnoreUpdateAndCreate("[" + attributeIndex);
+        if (attributeTree == null) {
+            attributeTree = new SymbolTree("[" + attributeIndex);
+            attributeTree.addChild(new SymbolTree(valueIndex + "]"));
+            operator.addChild(attributeTree);
+        } else {
+            SymbolTree valueTree = attributeTree.getSubtreeNoError(valueIndex + "]");
+            if (valueTree == null) {
+                attributeTree.addChild(new SymbolTree(valueIndex + "]"));
+            }
+        }
     }
 
     /**
@@ -395,11 +410,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                         operator = operator.getSubtree("update");
                     }
 
-                    int attributeIndex = getAttributeIndex(child.name);
                     for (SymbolTree symbolTree : child.getChildren()) {
-                        int valueIndex = addValueToAttribute(attributeIndex, symbolTree.name);
                         if (operator != null) {
-                            operator.addChild(createAttributeValuePair(attributeIndex, valueIndex));
+                            createAttributeValuePair(child.name, symbolTree.name, operator);
                         }
                     }
                 }
@@ -461,6 +474,11 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
                         rightHandTree.addChild(createBranch);
                         currentOperators.put(rightHandTree.name, rightHandTree);
+                    } else {
+                        SymbolTree operator = currentOperators.get(rightHandTree.name);
+                        for (SymbolTree rightHandChild : rightHandTree.getChildren()) {
+                            operator.addChild(rightHandChild);
+                        }
                     }
                     rightHandTree = null;
                 } else {
