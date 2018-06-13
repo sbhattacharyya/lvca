@@ -126,12 +126,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 //                .map(var -> "const int " + var + " = " + i.getAndIncrement() + "; \n")
 //                .collect(Collectors.joining());
 
-        vars += "chan Go_I_Support;\n" +
-                "broadcast chan I_Support;\n" +
+        vars += "broadcast chan Run_Rule;\n" +
                 "chan Continue_Run;\n" +
                 "chan Require_Test;\n" +
-                "chan Go_O_Support;\n" +
-                "broadcast chan O_Support;\n" +
                 "chan Go_Retract;\n" +
                 "broadcast chan Retract;\n" +
                 "int numRetracts;\n" +
@@ -140,7 +137,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "int doesContain;\n" +
                 "int addOp;\n" +
                 "int tempValue;\n" +
-                "int tempAttribute;";
+                "int tempAttribute;\n" +
+                "const int numTemplates = " + _templateNames.size() + ";\n" +
+                "int stackCondition[numTemplates];\n" +
+                "int stackAction[numTemplates];\n" +
+                "int stackConditionIndex = 0;\n" +
+                "int stackActionIndex = 0;\n";
 
 
         vars += "\n" +
@@ -246,20 +248,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return attributeToTemplate;
     }
 
-    private void getSystemElement() {
+    private void getSystemElement(Element attributeValuePairs) {
         List<String[]> compoundNames = _templateNames.stream().map(name -> new String[]{name + "_0", name}).collect(Collectors.toList());
         String goalTemplateName = simplifiedString(_goalProductionContext.sym_constant().getText());
-        String system = "";
-        system += compoundNames.stream().map(name -> name[0] + " = " + name[1] + "(); \n").collect(Collectors.joining());
-        system += "start = Init();\n" +
-                "iSupport = Run_I_Support();\n" +
-                "oSupport = Run_O_Support();\n" +
-                "retraction = Run_Retract();\n";
-        system += "goal = " + goalTemplateName + "(); \n";
-        system += "preferenceResolution = preferenceResolutionTemplate(); \n";
-        system += "system " + compoundNames.stream().map(cName -> cName[0]).collect(Collectors.joining(", ")) + ", goal, start, iSupport, oSupport, retraction, preferenceResolution;";
+        StringBuilder system = new StringBuilder();
+        system.append(compoundNames.stream().map(name -> name[0] + " = " + name[1] + "(); \n").collect(Collectors.joining()));
+        system.append(attributeValuePairs.getProperty("instantiations").getValue());
+        system.append("retraction = Run_Retract();\n");
+        system.append("goal = " + goalTemplateName + "(); \n");
+        system.append("preferenceResolution = preferenceResolutionTemplate(); \n");
+        system.append("system " + compoundNames.stream().map(cName -> cName[0]).collect(Collectors.joining(", ")) + ", goal, retraction, preferenceResolution, ");
+        system.append(attributeValuePairs.getProperty("system").getValue());
+        if (system.charAt(system.length() - 2) == ',') {
+            system.delete(system.length() - 2, system.length());
+        }
+        system.append(";");
 
-        ourDocument.setProperty("system", system);
+        ourDocument.setProperty("system", system.toString());
     }
 
     @Override
@@ -269,11 +274,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         HashMap<String, Attribute_Value_Wrapper> attributeToTemplate = getDeclarationElement();
 
-        getScheduler();
+        Element attributeValuePairs = getScheduler(attributeToTemplate);
 
         getOperatorPreferences();
 
-        getSystemElement();
+        getSystemElement(attributeValuePairs);
 
 
         try {
@@ -351,7 +356,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         Node actionSide = ctx.action_side().accept(this);
         String assignment = addExtraVariableAssignments(getText(actionSide, "assignments"));
 
-        String support;
         String inverseAssignment;
         if (actionSide.getProperty("inverseAssignments") != null) {
             StringBuilder addToInverseAssignments = new StringBuilder(getText(actionSide, "inverseAssignments"));
@@ -360,10 +364,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
             addToInverseAssignments.append("numRetracts++");
             inverseAssignment = addToInverseAssignments.toString();
-            support = "I_Support?";
         } else {
             inverseAssignment = null;
-            support = "O_Support?";
             shiftSyncroDown += 2 * SIZE_OF_TEXT;
             shiftInverseGuardsDown += 2 * SIZE_OF_TEXT;
         }
@@ -372,7 +374,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         int shiftInverseGuardsUp = getShiftOfProperty(conditionSide, "numInverseConditions");
         int shiftInverseAssignmentsUp = getShiftOfProperty(actionSide, "numInverseAssignments");
 
-        makeEdge(currentTemplate, startLocation, runLocation, null, null, support, new Integer[]{8, -104}, guard, new Integer[]{-152, -64}, assignment, new Integer[]{-152, -48 + shiftGuardsDown});
+        makeEdge(currentTemplate, startLocation, runLocation, null, null, "Run_Rule?", new Integer[]{8, -104}, guard, new Integer[]{-152, -64}, assignment, new Integer[]{-152, -48 + shiftGuardsDown});
         makeEdgeWithNails(currentTemplate, runLocation, startLocation, null, null, "Retract?", new Integer[]{16, -240 - shiftInverseGuardsUp - shiftInverseAssignmentsUp + shiftSyncroDown}, inverseGuard, new Integer[]{16, -226 - shiftInverseGuardsUp - shiftInverseAssignmentsUp + shiftInverseGuardsDown}, inverseAssignment, new Integer[]{16, -210 - shiftInverseAssignmentsUp}, new Integer[]{40, -168});
 
         return null;
@@ -1218,77 +1220,36 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return ret;
     }
 
-    private Element getScheduler() {
-        getInitScheduler();
-        getRunISupportScheduler();
-        getRunOSupportScheduler();
+    private Element getScheduler(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
+        getRunScheduler();
         getRetractionScheduler();
-        getAttributeValueTemplate();
-        return null;
+        return getAttributeValueTemplate(attributeToTemplate);
     }
 
-    private Element getInitScheduler() {
+    private Element getRunScheduler() {
         String startId = getCounter();
-        String callISupportId = getCounter();
-        String endInitId = getCounter();
-
-        Template initScheduler = makeTemplate("Init");
-
-        Location startLocation = makeLocationWithCoordinates(initScheduler, "Start", startId, true, true, -136, 0, -146, -34);
-        Location callISupportLocation = makeLocationWithCoordinates(initScheduler, "Call_I_Support", callISupportId, true, false, 59, 0, -34, -34);
-        Location endInitLocation = makeLocationWithCoordinates(initScheduler, "End_Init", endInitId, true, false, 221, 0, 221, -34);
-
-        makeEdge(initScheduler, callISupportLocation, endInitLocation, null, null, "Go_I_Support!", new Integer[]{85, -25}, null, null, null, null);
-        makeEdge(initScheduler, startLocation, callISupportLocation, null, null, null, null, null, null, "initialize(operators)", new Integer[]{-110, 8});
-
-        return initScheduler;
-    }
-
-    private Element getRunISupportScheduler() {
-        String startId = getCounter();
-        String callISupportId = getCounter();
+        String callRunId = getCounter();
         String collectOperatorsId = getCounter();
         String preferenceResolutionId = getCounter();
         String backToBeginningId = getCounter();
 
 
-        Template runISupportScheduler = makeTemplate("Run_I_Support");
+        Template runISupportScheduler = makeTemplate("Scheduler");
 
-        Location startLocation = makeLocationWithCoordinates(runISupportScheduler, "Start", startId, true, true, -272, 0, -282, -34);
-        Location callISupportLocation = makeLocationWithCoordinates(runISupportScheduler, "Call_I_Support", callISupportId, true, false, -85, 0, -76, -34);
-        Location collectOperatorsLocation = makeLocationWithCoordinates(runISupportScheduler, "Collect_Operators", collectOperatorsId, true, false, 289, 0, 279, -34);
-        Location preferenceResolutionLocation = makeLocationWithCoordinates(runISupportScheduler, "Preference_Resolution", preferenceResolutionId, true, false, 459, 0, 467, -34);
-        Location backToBeginningLocation = makeLocationWithCoordinates(runISupportScheduler, "Back_To_Beginning", backToBeginningId, true, false, 459, 76, 476, 85);
+        Location startLocation = makeLocationWithCoordinates(runISupportScheduler, "Start", startId, true, true, -527, -102, -537, -136);
+        Location callRunLocation = makeLocationWithCoordinates(runISupportScheduler, "Call_Run", callRunId, true, false, -323, -102, -391, -136);
+        Location collectOperatorsLocation = makeLocationWithCoordinates(runISupportScheduler, "Collect_Operators", collectOperatorsId, true, false, -119, -102, -178, -144);
+        Location preferenceResolutionLocation = makeLocationWithCoordinates(runISupportScheduler, "Preference_Resolution", preferenceResolutionId, true, false, 136, -102, 144, -127);
+        Location backToBeginningLocation = makeLocationWithCoordinates(runISupportScheduler, "Back_To_Beginning", backToBeginningId, true, false, 136, 59, 153, 34);
 
-        makeEdgeWithNails(runISupportScheduler, preferenceResolutionLocation, callISupportLocation, null, null, null, null, "numRetracts > 0 && isRetracting == false", new Integer[]{76, -110}, "numRetracts = 0", new Integer[]{76, -93}, new Integer[]{459, -119, -85, -119});
-        makeEdgeWithNails(runISupportScheduler, backToBeginningLocation, callISupportLocation, null, null, "Continue_Run?", new Integer[]{-68, 51}, null, null, "numRetracts = 0", new Integer[]{-68, 85}, new Integer[]{-85, 76});
-        makeEdge(runISupportScheduler, preferenceResolutionLocation, backToBeginningLocation, null, null, "Require_Test!", new Integer[]{467, 17}, "numRetracts == 0 && isRetracting == false", new Integer[]{467, 34}, null, null);
-        makeEdge(runISupportScheduler, collectOperatorsLocation, preferenceResolutionLocation, null, null, "Go_Retract!", new Integer[]{307, -17}, null, null, "fillOthers(),\nfinalOp = 0,\nisRetracting = true", new Integer[]{306, 8});
-        makeEdge(runISupportScheduler, callISupportLocation, collectOperatorsLocation, null, null, "I_Support!", new Integer[]{59, -25}, getText(_goalProductionContext.condition_side().accept(this), "inverseGuards"), new Integer[]{-68, 8}, "clearFill(required),\nclearFill(acceptable),\nclearFill(best)", new Integer[]{119, 8});
-        makeEdge(runISupportScheduler, startLocation, callISupportLocation, null, null, "Go_I_Support?", new Integer[]{-246, -17}, null, null, null, null);
+        makeEdgeWithNails(runISupportScheduler, backToBeginningLocation, callRunLocation, null, null, "Continue_Run?", new Integer[]{-280, 42}, null, null, "numRetracts = 0", new Integer[]{-280, 68}, new Integer[]{-323, 59});
+        makeEdge(runISupportScheduler, preferenceResolutionLocation, backToBeginningLocation, null, null, "Require_Test!", new Integer[]{144, -51}, "numRetracts == 0 &&\n!isRetracting", new Integer[]{144, -34}, null, null);
+        makeEdgeWithNails(runISupportScheduler, preferenceResolutionLocation, callRunLocation, null, null, null, null, "numRetracts > 0 &&\n!isRetracting", new Integer[]{-306, -272}, "numRetracts = 0", new Integer[]{-306, -238}, new Integer[]{136, -212, -323, -212});
+        makeEdge(runISupportScheduler, collectOperatorsLocation, preferenceResolutionLocation, null, null, "Go_Retract!", new Integer[]{-42, -127}, "stackConditionIndex == N &&\nstackActionIndex == N", new Integer[]{-102, -85},         "fillOthers(),\nfinalOp = 0,\nisRetracting = true,\nstackConditionIndex = 0,\nstackActionIndex = 0", new Integer[]{-102, -51});
+        makeEdge(runISupportScheduler, callRunLocation, collectOperatorsLocation, null, null, "Run_Rule!", new Integer[]{-263, -127}, getText(_goalProductionContext.condition_side().accept(this), "inverseGuards"), new Integer[]{-306, -85}, "clearFill(required),\nclearFill(acceptable),\nclearFill(best)", new Integer[]{-306, -68});
+        makeEdge(runISupportScheduler, startLocation, callRunLocation, null, null, null, null, null, null, "initialize(operators)", new Integer[]{-501, -93});
 
         return runISupportScheduler;
-    }
-
-    private Element getRunOSupportScheduler() {
-        String startId = getCounter();
-        String callOSupportId = getCounter();
-        String callRetractId = getCounter();
-        String goBackToBeginningId = getCounter();
-
-        Template runOSupportScheduler = makeTemplate("Run_O_Support");
-
-        Location startLocation = makeLocationWithCoordinates(runOSupportScheduler, "Start", startId, true, true, -306, 0, -357, -25);
-        Location callOSupportLocation = makeLocationWithCoordinates(runOSupportScheduler, "Call_O_Support", callOSupportId, true, false, -144, 0, -187, -42);
-        Location callRetractLocation = makeLocationWithCoordinates(runOSupportScheduler, "Call_Retract", callRetractId, true, false, 17, 0, -25, -42);
-        Location goBackToBeginningLocation = makeLocationWithCoordinates(runOSupportScheduler, "Go_Back_To_Beginning", goBackToBeginningId, true, false, 212, 0, 135, -42);
-
-        makeEdgeWithNails(runOSupportScheduler, goBackToBeginningLocation, startLocation, null, null, "Continue_Run!", new Integer[]{-119, 51}, "isRetracting == false", new Integer[]{-144, 102}, null, null, new Integer[]{-68, 93});
-        makeEdge(runOSupportScheduler, callRetractLocation, goBackToBeginningLocation, null, null, "Go_Retract!", new Integer[]{35, -17}, null, null, "isRetracting = true", new Integer[]{35, 0});
-        makeEdge(runOSupportScheduler, callOSupportLocation, callRetractLocation, null, null, "O_Support!", new Integer[]{-126, -17}, null, null, null, null);
-        makeEdge(runOSupportScheduler, startLocation, callOSupportLocation, null, null, "Go_O_Support?", new Integer[]{-288, -17}, null, null, null, null);
-        
-        return runOSupportScheduler;
     }
 
     private Element getRetractionScheduler() {
@@ -1309,7 +1270,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return retractionScheduler;
     }
 
-    private Element getAttributeValueTemplate() {
+    private String[] makeAttributeValueTemplates(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
+        StringBuilder instantiationsCollection = new StringBuilder();
+        StringBuilder systemProcesses = new StringBuilder();
+        final AtomicInteger i = new AtomicInteger(1);
+        for (Attribute_Value_Wrapper attribute_value_wrapper : attributeToTemplate.values()) {
+            String newAVPair = "AV" + i.getAndIncrement();
+            systemProcesses.append(newAVPair + ", ");
+            instantiationsCollection.append(newAVPair);
+            instantiationsCollection.append(" = ");
+            instantiationsCollection.append("Attribute_Value(");
+            instantiationsCollection.append(attribute_value_wrapper.getNumValues() + ", " + attribute_value_wrapper.getAttributeIndex() + ", " + attribute_value_wrapper.getOperatorId());
+            instantiationsCollection.append(");\n");
+        }
+        return new String[]{instantiationsCollection.toString(), systemProcesses.toString()};
+    }
+
+    private Element getAttributeValueTemplate(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
         String startId = getCounter();
 
         Template attributeValueTemplate = makeTemplate("Attribute_Value");
@@ -1336,8 +1313,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         Location startLocation = makeLocationWithCoordinates(attributeValueTemplate, "Start", startId, true, true, -739, -195, -756, -229);
 
-        makeEdgeWithNails(attributeValueTemplate, startLocation, startLocation, null, null, null, null, "doesContain == 0 &&\nfinalOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-1071, -204}, "doesContain = doValuesContain()", new Integer[]{-1071, -153}, new Integer[]{-739, -144, -807, -144, -807, -195});
+        makeEdgeWithNails(attributeValueTemplate, startLocation, startLocation, null, null, null, null, "doesContain == 0 &&\naddOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-1071, -204}, "doesContain = doValuesContain()", new Integer[]{-1071, -153}, new Integer[]{-739, -144, -807, -144, -807, -195});
         makeEdgeWithNails(attributeValueTemplate, startLocation, startLocation, null, null, null, null, "addOperator &&\naddOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-663, -204}, "addValue()", new Integer[]{-663, -153}, new Integer[]{-739, -144, -671, -144, -671, -195});
+
+        String[] instantiationsAndSystem = makeAttributeValueTemplates(attributeToTemplate);
+        attributeValueTemplate.setProperty("instantiations", instantiationsAndSystem[0]);
+        attributeValueTemplate.setProperty("system", instantiationsAndSystem[1]);
 
         return attributeValueTemplate;
     }
@@ -1530,7 +1511,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdge(operatorPreferencesTemplate, requireTest, noName3, null, null, null, null, "numLeft == 1", new Integer[]{-3256, -1448}, "currentOp = required[0]", new Integer[]{-3272, -1416});
         makeEdgeWithNails(operatorPreferencesTemplate, requireTest, constraintFailure, null, null, null, null, "numLeft > 1", new Integer[]{-3144, -1552}, null, null, new Integer[]{-3320, -1424, -3264, -1520});
         makeEdge(operatorPreferencesTemplate, start, requireTest, null, null, "Require_Test?", new Integer[]{-3624, -1520}, null, null, "numLeft = getNumLeft(required)", new Integer[]{-3728, -1496});
-        makeEdgeWithNails(operatorPreferencesTemplate, done, start, null, null, "Go_O_Support!", new Integer[]{-3918, -1113}, null, null, null, null, new Integer[]{-3808, -518, -3808, -1538});
+        makeEdgeWithNails(operatorPreferencesTemplate, done, start, null, null, "Continue_Run!", new Integer[]{-3918, -1113}, null, null, null, null, new Integer[]{-3808, -518, -3808, -1538});
 
         return null;
     }
