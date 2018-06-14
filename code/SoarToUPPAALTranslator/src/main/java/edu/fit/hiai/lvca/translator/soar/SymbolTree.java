@@ -18,7 +18,7 @@ public class SymbolTree
         children = new LinkedList<>();
     }
 
-    private boolean isLeaf()
+    public boolean isLeaf()
     {
         return children.size() == 0;
     }
@@ -166,20 +166,20 @@ public class SymbolTree
         }
     }
 
-    private void DFSForAttributeValuesUtiliy(LinkedList<SymbolTree> dfsCollection, SymbolTree currentTree) {
+    private void DFSForAttributeValuesUtiliy(LinkedList<SymbolTree> dfsCollection, SymbolTree currentTree, boolean includePreferences) {
         for (SymbolTree child : currentTree.getChildren()) {
-            if (child.getChildren().size() != 0 && !child.name.equals("create")) {
-                DFSForAttributeValuesUtiliy(dfsCollection, child);
+            if ((child.getChildren().size() != 0 && !child.name.equals("create")) || (includePreferences && child.name.startsWith("is"))) {
+                DFSForAttributeValuesUtiliy(dfsCollection, child, includePreferences);
             }
         }
-        if (currentTree.name.charAt(0) == '[') {
+        if (currentTree.name.charAt(0) == '[' || (includePreferences && currentTree.name.startsWith("is"))) {
             dfsCollection.add(currentTree);
         }
     }
 
-    public LinkedList<SymbolTree> DFSForAttributeValues() {
+    public LinkedList<SymbolTree> DFSForAttributeValues(boolean includePreferences) {
         LinkedList<SymbolTree> dfsCollection = new LinkedList<>();
-        DFSForAttributeValuesUtiliy(dfsCollection, this);
+        DFSForAttributeValuesUtiliy(dfsCollection, this, includePreferences);
         return dfsCollection;
     }
 

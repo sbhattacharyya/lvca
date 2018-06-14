@@ -94,12 +94,13 @@ public class SoarTranslator
         }
     }
 
-    private static boolean compareUpdateToCreate(SymbolTree update, SymbolTree create) {
+    private static boolean compareUpdateToCreate(SymbolTree update, SymbolTree create, ArrayList<ArrayList<String>> operatorAttributesAndValues) {
         for (SymbolTree attributeTree : update.getChildren()) {
             if (attributeTree.name.equals("update")) {
                 continue;
             }
             SymbolTree otherChildSubtree = create.getSubtreeNoError(attributeTree.name);
+
             if (otherChildSubtree == null) {
                 return false;
             } else {
@@ -107,7 +108,7 @@ public class SoarTranslator
                     SymbolTree searchSourceOther = otherChildSubtree.getSubtreeNoError(valueTree.name);
                     if (searchSourceOther == null) {
                         return false;
-                    }
+                     }
                 }
             }
         }
@@ -164,7 +165,7 @@ public class SoarTranslator
             keepUpdating[0] = false;
             for (SymbolTree baseUpdate : updateOperators.getChildren()) {
                 for (SymbolTree baseCreate : createOperators.getChildren()) {
-                    if (compareUpdateToCreate(baseUpdate, baseCreate)) {
+                    if (compareUpdateToCreate(baseUpdate, baseCreate, sv.getOperatorAttributesAndValues())) {
                         SymbolTree updateBranch = baseUpdate.getSubtree("update");
                         for (SymbolTree baseValueUpdate : updateBranch.getChildren()) {
                             SymbolTree baseValueCreate = checkCreateContinue(baseValueUpdate.name, baseCreate, keepUpdating);
@@ -195,6 +196,7 @@ public class SoarTranslator
         Set<String> boolAttributeNames = symbolVisitor.getBooleanSymbols();
         ArrayList<SymbolTree> operators = symbolVisitor.getOperators();
         ArrayList<ArrayList<String>> operatorsAttributesAndValues = symbolVisitor.getOperatorAttributesAndValues();
+        ArrayList<ArrayList<String>> stateAttributesAndValues = symbolVisitor.getStateAttributesAndValues();
         int numOperators = symbolVisitor.getOPERATOR_ID();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
