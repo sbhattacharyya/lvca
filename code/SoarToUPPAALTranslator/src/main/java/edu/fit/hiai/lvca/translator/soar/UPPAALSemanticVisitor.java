@@ -51,7 +51,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         globalToIndex = new HashMap<>();
         final AtomicInteger i = new AtomicInteger(1);
         for (String variable : _globals) {
-            globalToIndex.put(variable, i.getAndIncrement());
+            if (!variable.equals("nil")) {
+                globalToIndex.put(variable, i.getAndIncrement());
+            }
         }
         globalToIndex.put("LATEST_NUM", i.intValue());
     }
@@ -66,20 +68,14 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return str.replace("-", "_").replace("*", "_");
     }
 
+
+
     private HashMap<String, Attribute_Value_Wrapper> getDeclarationElement() {
         HashMap<String, Attribute_Value_Wrapper> attributeToTemplate  = new HashMap<>();
 
         _globals.remove("nil"); // added later so that nil always equals 0
 
         String vars = "";
-
-
-//        vars += _globals
-//                .stream()
-//                .filter(var -> var.startsWith("state"))
-//                .map(this::simplifiedString)
-//                .map(var -> "int " + var + "; \n")
-//                .collect(Collectors.joining());
 
         vars += _booleanGlobals
                 .stream()
@@ -93,11 +89,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         StringBuilder globalVariables = new StringBuilder();
         for (String variable : _globals) {
             String refinedVariable = simplifiedString(variable);
-            int variableIndex = globalToIndex.get(variable);
-            globalVariables.append("const int ");
-            globalVariables.append(refinedVariable);
-            globalVariables.append(" = ");
-            globalVariables.append(variableIndex);
+            int variableIndex;
+            if (variable.startsWith("NON_CONST_")) {
+                variableIndex = -1;
+                globalVariables.append("int ");
+                int startOfActualVariableName = 10;
+                globalVariables.append(simplifiedString(variable.substring(startOfActualVariableName)));
+            } else {
+                variableIndex = globalToIndex.get(variable);
+                globalVariables.append("const int ");
+                globalVariables.append(refinedVariable);
+                globalVariables.append(" = ");
+                globalVariables.append(variableIndex);
+            }
             globalVariables.append("; \n");
             if (variable.startsWith("state_operator")) {
                 for (SymbolTree productionTree : _operators) {
@@ -121,12 +125,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
         }
         vars += globalVariables.toString();
-
-//        vars += _globals
-//                .stream()
-//                .map(this::simplifiedString)
-//                .map(var -> "const int " + var + " = " + i.getAndIncrement() + "; \n")
-//                .collect(Collectors.joining());
 
         vars += "broadcast chan Run_Rule;\n" +
                 "chan Continue_Run;\n" +
@@ -336,12 +334,54 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
-    private int getShiftOfProperty(Node originNode, String property) {
-        int returnNum = Integer.parseInt(getText(originNode, property));
-        if (returnNum > 0) {
-            returnNum--;
+//    private int getShiftOfProperty(Node originNode, String property) {
+//        int returnNum = Integer.parseInt(getText(originNode, property));
+//        if (returnNum > 0) {
+//            returnNum--;
+//        }
+//        return returnNum * SIZE_OF_TEXT;
+//    }
+
+    private Integer[] getNailsForConditions(boolean isLastLocation, int[] startNailLocations, Integer[] shiftPossibleNails, boolean leadsToStart) {
+        if (isLastLocation && !leadsToStart) {
+            return new Integer[]{startNailLocations[0] + shiftPossibleNails[0], startNailLocations[1] + shiftPossibleNails[1]};
+        } else {
+            return new Integer[]{startNailLocations[0] + shiftPossibleNails[0], startNailLocations[1] + shiftPossibleNails[1], startNailLocations[2] + shiftPossibleNails[2], startNailLocations[3] + shiftPossibleNails[1]};
         }
-        return returnNum * SIZE_OF_TEXT;
+    }
+
+    private Location addHorizontalCondition (Template currentTemplate, Location lastLocation, Location conditionSource, int[] lastLocationCoords, String stackGuard, String assignment, String removeStackAssignment, int xTextLocation, boolean isLastLocation) {
+        int xTempCoords = lastLocationCoords[0] + 355;
+        Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, xTempCoords, 0, null, null);
+
+        makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, stackGuard, new Integer[]{xTextLocation, lastLocationCoords[1] - 20}, assignment, new Integer[]{lastLocationCoords[0] + 42, lastLocationCoords[1] + 8});
+        Integer[] nails = getNailsForConditions(isLastLocation, new int[]{xTempCoords, lastLocationCoords[1], xTempCoords, lastLocationCoords[1]}, new Integer[]{-51, 110, -355}, getText(conditionSource, "name").equals("Start"));
+        makeEdgeWithNails(currentTemplate, lastLocationTemp, conditionSource, null, null, null, null, "doesContain == -1", new Integer[]{xTextLocation, lastLocationCoords[1] + 85}, removeStackAssignment, new Integer[]{xTextLocation, lastLocationCoords[1] + 115}, nails);
+        lastLocationCoords[0] = xTempCoords;
+        return lastLocationTemp;
+    }
+
+    private Location moveToNextStage(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String locationName, String guard, String addToStack) {
+        Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, locationName, getCounter(), true, false, lastLocationCoords[0] + 400, 0, lastLocationCoords[0] + 342, -34);
+        makeEdgeWithNails(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, guard, new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 85}, addToStack, new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 120}, new Integer[]{lastLocationCoords[0] + 51, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, lastLocationCoords[1] + 110});
+        lastLocationCoords[0] += 400;
+        lastLocationCoords[1] = 0;
+        return lastLocationTemp;
+    }
+
+    private Location addVerticalConditions(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String[] guardCollection, Location conditionSource, String removeStack, int xTextLocation) {
+        for (int i = 1; i < guardCollection.length; i++) {
+            int lastLocationYTemp = lastLocationCoords[1] + 110;
+            Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationYTemp, null, null);
+
+            makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0]+ 17, lastLocationCoords[1] + 8}, guardCollection[i], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8 + SIZE_OF_TEXT});
+            Integer[] nails = getNailsForConditions(i == guardCollection.length - 1, new int[]{lastLocationCoords[0], lastLocationYTemp, lastLocationCoords[0], lastLocationYTemp}, new Integer[]{-51, 110, -355}, getText(conditionSource, "name").equals("Start"));
+            makeEdgeWithNails(currentTemplate, lastLocationTemp, conditionSource, null, null, null, null, "doesContain == -1", new Integer[]{xTextLocation, lastLocationYTemp + 85}, removeStack, new Integer[]{xTextLocation, lastLocationYTemp + 115}, nails);
+
+            lastLocationCoords[1] = lastLocationYTemp;
+            lastLocation = lastLocationTemp;
+        }
+        return lastLocation;
     }
 
     @Override
@@ -370,8 +410,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         String guard = getText(conditionSide, "guards");
         String inverseGuard;
 
-        int shiftSyncroDown = 0;
-        int shiftInverseGuardsDown = 0;
 
         if (conditionSide.getProperty("inverseGuards") != null) {
             inverseGuard = getText(conditionSide, "inverseGuards");
@@ -379,7 +417,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         } else {
             inverseGuard = null;
             learnInverseAssignments = false;
-            shiftSyncroDown += SIZE_OF_TEXT;
         }
 
         Node actionSide = ctx.action_side().accept(this);
@@ -387,46 +424,40 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         String inverseAssignment;
         if (actionSide.getProperty("inverseAssignments") != null) {
-            StringBuilder addToInverseAssignments = new StringBuilder(getText(actionSide, "inverseAssignments"));
-            if (addToInverseAssignments.length() > 0) {
-                addToInverseAssignments.append(",\n");
-            }
-            addToInverseAssignments.append("numRetracts++");
-            inverseAssignment = addToInverseAssignments.toString();
+            inverseAssignment = getText(actionSide, "inverseAssignments");
         } else {
             inverseAssignment = null;
-            shiftSyncroDown += 2 * SIZE_OF_TEXT;
-            shiftInverseGuardsDown += 2 * SIZE_OF_TEXT;
         }
-
-        int shiftGuardsDown = getShiftOfProperty(conditionSide, "numConditions");
-        int shiftInverseGuardsUp = getShiftOfProperty(conditionSide, "numInverseConditions");
-        int shiftInverseAssignmentsUp = getShiftOfProperty(actionSide, "numInverseAssignments");
 
         String[] guardCollection = guard.split("::");
 
-        int[] lastLocationCoords = new int[]{675, 0};
-        Location lastLocation = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationCoords[1], null, null);
+        int[] lastLocationCoords = new int[]{323, 0};
+//        Location lastLocation = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationCoords[1], null, null);
+//
+//        makeEdge(currentTemplate, runGuardLocation, lastLocation, null, null, null, null, "stackCondition[stackConditionIndex - 1] == " + templateIndex, new Integer[]{340, -20}, guardCollection[0], new Integer[]{365, 8});
+//        makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, null, null, "doesContain == -1", new Integer[]{340, lastLocationCoords[1] + 85}, "removeStackCondition()", new Integer[]{340, lastLocationCoords[1] + 115}, new Integer[]{lastLocationCoords[0] - 51, lastLocationCoords[1] + 110, lastLocationCoords[0] - 400, lastLocationCoords[1] + 110});
 
-        makeEdge(currentTemplate, runGuardLocation, lastLocation, null, null, null, null, "stackCondition[stackConditionIndex - 1] == " + templateIndex, new Integer[]{340, -20}, guardCollection[0], new Integer[]{365, 8});
-        makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, null, null, "doesContain == -1", new Integer[]{340, lastLocationCoords[1] + 85}, "removeStackCondition()", new Integer[]{340, lastLocationCoords[1] + 115}, new Integer[]{lastLocationCoords[0] - 51, lastLocationCoords[1] + 110, lastLocationCoords[0] - 400, lastLocationCoords[1] + 110});
+        int xTextLocation = lastLocationCoords[0] + 17;
+        Location lastLocation = addHorizontalCondition(currentTemplate, runGuardLocation, startLocation, lastLocationCoords, "stackCondition[stackConditionIndex - 1] == " + templateIndex,guardCollection[0], "removeStackCondition()", xTextLocation, guardCollection.length <= 1);
 
-        for (int i = 1; i < guardCollection.length; i++) {
-            int lastLocationYTemp = lastLocationCoords[1] + 110;
-            Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationYTemp, null, null);
+//        for (int i = 1; i < guardCollection.length; i++) {
+//            int lastLocationYTemp = lastLocationCoords[1] + 110;
+//            Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationYTemp, null, null);
+//
+//            makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0]+ 17, lastLocationCoords[1] + 8}, guardCollection[i], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8 + SIZE_OF_TEXT});
+//            makeEdgeWithNails(currentTemplate, lastLocationTemp, startLocation, null, null, null, null, "doesContain == -1", new Integer[]{340, lastLocationYTemp + 85}, "removeStackCondition()", new Integer[]{340, lastLocationYTemp + 115}, new Integer[]{lastLocationCoords[0] - 51, lastLocationYTemp + 110, lastLocationCoords[0] - 355, lastLocationYTemp + 110});
+//
+//            lastLocationCoords[1] = lastLocationYTemp;
+//            lastLocation = lastLocationTemp;
+//        }
+        lastLocation = addVerticalConditions(currentTemplate, lastLocation, lastLocationCoords, guardCollection, startLocation, "removeStackCondition()", xTextLocation);
 
-            makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0]+ 17, lastLocationCoords[1] + 8}, guardCollection[i], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8 + SIZE_OF_TEXT});
-            makeEdgeWithNails(currentTemplate, lastLocationTemp, startLocation, null, null, null, null, "doesContain == -1", new Integer[]{340, lastLocationYTemp + 85}, "removeStackCondition()", new Integer[]{340, lastLocationYTemp + 115}, new Integer[]{lastLocationCoords[0] - 51, lastLocationYTemp + 110, lastLocationCoords[0] - 400, lastLocationYTemp + 110});
-
-            lastLocationCoords[1] = lastLocationYTemp;
-            lastLocation = lastLocationTemp;
-        }
-
-        Location runAssignmentLocation = makeLocationWithCoordinates(currentTemplate, "Run_Assignment", getCounter(), true, false, lastLocationCoords[0] + 400, 0, 1017, -34);
-        makeEdgeWithNails(currentTemplate, lastLocation, runAssignmentLocation, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 85}, "addToStackAction(" + templateIndex + ")", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 120}, new Integer[]{lastLocationCoords[0] + 51, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, lastLocationCoords[1] + 110});
-        lastLocation = runAssignmentLocation;
-        lastLocationCoords[0] += 400;
-        lastLocationCoords[1] = 0;
+//        Location runAssignmentLocation = makeLocationWithCoordinates(currentTemplate, "Run_Assignment", getCounter(), true, false, lastLocationCoords[0] + 400, 0, 1017, -34);
+//        makeEdgeWithNails(currentTemplate, lastLocation, runAssignmentLocation, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 85}, "addToStackAction(" + templateIndex + ")", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 120}, new Integer[]{lastLocationCoords[0] + 51, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, lastLocationCoords[1] + 110});
+//        lastLocation = runAssignmentLocation;
+//        lastLocationCoords[0] += 400;
+//        lastLocationCoords[1] = 0;
+        lastLocation = moveToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Assignment", "doesContain == 1", "addToStackAction(" + templateIndex + ")");
 
         String[] assignmentCollection = assignment.split("::");
         int lastLocationXTemp = lastLocationCoords[0] + 350;
@@ -444,7 +475,18 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             lastLocation = lastLocationTemp;
         }
 
+        if (inverseGuard != null) {
+            String[] inverseGuardCollection = inverseGuard.split(" :: ");
+            lastLocation = moveToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Retract", "!addOperator", "addToStackRetract(" + templateIndex + ")");
+            xTextLocation = lastLocationCoords[0] + 17;
+            Location retractLocation = makeLocationWithCoordinates(currentTemplate, "Run_Retraction_Assignments", getCounter(), true, false, lastLocationCoords[0], lastLocationCoords[1] + guardCollection.length * 110, lastLocationCoords[0] - 220, lastLocationCoords[1] + guardCollection.length * 110 - 30);
+            lastLocation = addHorizontalCondition(currentTemplate, lastLocation, retractLocation, lastLocationCoords, "stackRetract[stackRetractIndex - 1] == " + templateIndex, inverseGuardCollection[0], null, xTextLocation, inverseGuardCollection.length <= 1);
+            lastLocation = addVerticalConditions(currentTemplate, lastLocation, lastLocationCoords, inverseGuardCollection, retractLocation, null, xTextLocation);
+            if (inverseAssignment != null) {
+                String[] inverseAssignmentCollection = inverseAssignment.split(" :: ");
 
+            }
+        }
 
 //        makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, "Retract?", new Integer[]{40, -180 - shiftInverseGuardsUp - shiftInverseAssignmentsUp + shiftSyncroDown}, inverseGuard, new Integer[]{16, -226 - shiftInverseGuardsUp - shiftInverseAssignmentsUp + shiftInverseGuardsDown}, inverseAssignment, new Integer[]{16, -210 - shiftInverseAssignmentsUp}, new Integer[]{lastLocationCoords[0] + 300, lastLocationCoords[1], lastLocationCoords[0] + 300, -100, -152, -100});
 
@@ -557,12 +599,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private void addGlobal(String newTempVariable) {
-        if (!_globals.contains(newTempVariable)) {
-            _globals.add(newTempVariable);
-            int globalIndex = globalToIndex.get("LATEST_NUM");
-            globalToIndex.put(newTempVariable, globalIndex);
-            globalToIndex.put("LATEST_NUM", globalIndex++);
-        }
+        newTempVariable = "NON_CONST_" + newTempVariable;
+        _globals.add(newTempVariable);
     }
 
     private String[] innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest) {
@@ -1326,10 +1364,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         n.setProperty("y", nailsXY[1]);
         Node last = ret.insert(n, null);
         for (int i = 2; i < nailsXY.length; i += 2) {
-            n = ret.createNail();
-            n.setProperty("x", nailsXY[i]);
-            n.setProperty("y", nailsXY[i + 1]);
-            last = ret.insert(n, last);
+            if (nailsXY[i] != null && nailsXY[i + 1] != null) {
+                n = ret.createNail();
+                n.setProperty("x", nailsXY[i]);
+                n.setProperty("y", nailsXY[i + 1]);
+                last = ret.insert(n, last);
+            }
         }
         return ret;
     }
