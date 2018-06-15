@@ -384,6 +384,26 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return lastLocation;
     }
 
+    private Location addHorizontalAction(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String stackGuard, String assignment) {
+        int lastLocationXTemp = lastLocationCoords[0] + 350;
+        Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationXTemp, lastLocationCoords[1], null, null);
+        makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, stackGuard, new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] - 20}, assignment, new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8});
+        lastLocationCoords[0] = lastLocationXTemp;
+        return lastLocationTemp;
+    }
+
+    private Location addVerticalAction(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String[] assignmentCollection) {
+        for (int i = 1; i < assignmentCollection.length; i++) {
+            int lastLocationYTemp = lastLocationCoords[1] + 110;
+            Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationYTemp, null, null);
+            makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "!addOperator", new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8}, assignmentCollection[i], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8 + SIZE_OF_TEXT});
+
+            lastLocationCoords[1] = lastLocationYTemp;
+            lastLocation = lastLocationTemp;
+        }
+        return lastLocation;
+    }
+
     @Override
     public Node visitSoar_production(SoarParser.Soar_productionContext ctx) {
         if (ctx.getText().contains("(halt)")) {
@@ -460,20 +480,22 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         lastLocation = moveToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Assignment", "doesContain == 1", "addToStackAction(" + templateIndex + ")");
 
         String[] assignmentCollection = assignment.split("::");
-        int lastLocationXTemp = lastLocationCoords[0] + 350;
-        Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationXTemp, lastLocationCoords[1], null, null);
-        makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "stackAction[stackActionIndex - 1] == " + templateIndex, new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] - 20}, assignmentCollection[0], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8});
-        lastLocation = lastLocationTemp;
-        lastLocationCoords[0] = lastLocationXTemp;
+//            int lastLocationXTemp = lastLocationCoords[0] + 350;
+//            Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationXTemp, lastLocationCoords[1], null, null);
+//            makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "stackAction[stackActionIndex - 1] == " + templateIndex, new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] - 20}, assignmentCollection[0], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8});
+//            lastLocation = lastLocationTemp;
+//            lastLocationCoords[0] = lastLocationXTemp;
+        lastLocation = addHorizontalAction(currentTemplate, lastLocation, lastLocationCoords, "stackAction[stackActionIndex - 1] == " + templateIndex, assignmentCollection[0]);
 
-        for (int i = 1; i < assignmentCollection.length; i++) {
-            int lastLocationYTemp = lastLocationCoords[1] + 110;
-            lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationYTemp, null, null);
-            makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "!addOperator", new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8}, assignmentCollection[i], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8 + SIZE_OF_TEXT});
-
-            lastLocationCoords[1] = lastLocationYTemp;
-            lastLocation = lastLocationTemp;
-        }
+//            for (int i = 1; i < assignmentCollection.length; i++) {
+//                   int lastLocationYTemp = lastLocationCoords[1] + 110;
+//                   Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], lastLocationYTemp, null, null);
+//                   makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, null, null, "!addOperator", new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8}, assignmentCollection[i], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8 + SIZE_OF_TEXT});
+//
+//                   lastLocationCoords[1] = lastLocationYTemp;
+//                   lastLocation = lastLocationTemp;
+//            }
+        lastLocation = addVerticalAction(currentTemplate, lastLocation, lastLocationCoords, assignmentCollection);
 
         if (inverseGuard != null) {
             String[] inverseGuardCollection = inverseGuard.split(" :: ");
@@ -482,11 +504,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             Location retractLocation = makeLocationWithCoordinates(currentTemplate, "Run_Retraction_Assignments", getCounter(), true, false, lastLocationCoords[0], lastLocationCoords[1] + guardCollection.length * 110, lastLocationCoords[0] - 220, lastLocationCoords[1] + guardCollection.length * 110 - 30);
             lastLocation = addHorizontalCondition(currentTemplate, lastLocation, retractLocation, lastLocationCoords, "stackRetract[stackRetractIndex - 1] == " + templateIndex, inverseGuardCollection[0], null, xTextLocation, inverseGuardCollection.length <= 1);
             lastLocation = addVerticalConditions(currentTemplate, lastLocation, lastLocationCoords, inverseGuardCollection, retractLocation, null, xTextLocation);
+            makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 85}, "removeStackRetract", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 120}, new Integer[]{lastLocationCoords[0] + 51, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, -110, -152, -110});
             if (inverseAssignment != null) {
                 String[] inverseAssignmentCollection = inverseAssignment.split(" :: ");
 
             }
         }
+//        } else if (inverseGuard != null ){
+//
+//        } else {
+//            makeEdge(currentTemplate, lastLocation, startLocation, null, null, null, null, "stackAction[stackActionIndex - 1] == " + templateIndex, new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] - 20}, assignmentCollection[0], new Integer[]{lastLocationCoords[0] + 17, lastLocationCoords[1] + 8});
+//        }
+
+//        makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, null, null, null, null, null, null, new Integer[]{lastLocationCoords[0] + 51, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, -110, -152, -110});
 
 //        makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, "Retract?", new Integer[]{40, -180 - shiftInverseGuardsUp - shiftInverseAssignmentsUp + shiftSyncroDown}, inverseGuard, new Integer[]{16, -226 - shiftInverseGuardsUp - shiftInverseAssignmentsUp + shiftInverseGuardsDown}, inverseAssignment, new Integer[]{16, -210 - shiftInverseAssignmentsUp}, new Integer[]{lastLocationCoords[0] + 300, lastLocationCoords[1], lastLocationCoords[0] + 300, -100, -152, -100});
 
