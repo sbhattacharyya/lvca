@@ -10,10 +10,7 @@ import org.apache.commons.cli.*;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -197,6 +194,7 @@ public class SoarTranslator
         ArrayList<SymbolTree> operators = symbolVisitor.getOperators();
         ArrayList<ArrayList<String>> operatorsAttributesAndValues = symbolVisitor.getOperatorAttributesAndValues();
         ArrayList<ArrayList<String>> stateAttributesAndValues = symbolVisitor.getStateAttributesAndValues();
+        HashMap<String, ProductionVariables> actualVariablesPerProduction = symbolVisitor.getActualVariablesInProduction();
         int numOperators = symbolVisitor.getOPERATOR_ID();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
@@ -210,7 +208,7 @@ public class SoarTranslator
 
         expandOperators(operators, symbolVisitor);
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators, numOperators, operatorsAttributesAndValues));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators, numOperators, operatorsAttributesAndValues, stateAttributesAndValues, actualVariablesPerProduction));
     }
 
     /**

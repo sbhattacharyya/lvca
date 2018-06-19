@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
  * Created by mstafford on 8/4/16.
  *
  * Get all symbols and working memory locations used in the Soar agent. This class produces a single SymbolTree that
- * contains all memory locations used by the Soar agent. Each variable's working memory association is stored. Each
+ * variablesContains all memory locations used by the Soar agent. Each variable's working memory association is stored. Each
  * string written is stored.
  *
  */
@@ -31,6 +31,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private ArrayList<ArrayList<String>> operatorAttributesAndValues = new ArrayList<>();
     private ArrayList<ArrayList<String>> stateAttributesAndValues = new ArrayList<>();
     private boolean unaryOrBinaryFlag = false;
+    private HashMap<String, ProductionVariables> actualVariablesInProduction = new HashMap<>();
+    private ProductionVariables currentVariablesPerProduction;
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -79,6 +81,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     ArrayList<ArrayList<String>> getStateAttributesAndValues() { return stateAttributesAndValues; }
 
+    HashMap<String, ProductionVariables> getActualVariablesInProduction() { return actualVariablesInProduction; }
+
     int getOPERATOR_ID() { return OPERATOR_ID; }
 
     /**
@@ -91,6 +95,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitSoar_production(SoarParser.Soar_productionContext ctx)
     {
+        currentVariablesPerProduction = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         currentOperators = new HashMap<>();
         ctx.condition_side().accept(this);
@@ -109,6 +114,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         {
             variablePaths.put(entry.getKey(), workingMemoryTree.pathTo(entry.getValue()));
         }
+        currentVariablesPerProduction.clean();
+        actualVariablesInProduction.put(ctx.sym_constant().getText(), currentVariablesPerProduction);
 
 
         globalVariableDictionary.put(ctx.sym_constant().getText(), variablePaths);
@@ -152,6 +159,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     public SymbolTree visitConds_for_one_id(SoarParser.Conds_for_one_idContext ctx)
     {
         SymbolTree attachPoint = ctx.id_test().accept(this);
+        if (currentVariablesPerProduction.variablesContains(ctx.id_test().getText())) {
+            currentVariablesPerProduction.addToRejected(ctx.id_test().getText());
+        }
 
         for(SoarParser.Attr_value_testsContext avt : ctx.attr_value_tests())
         {
@@ -286,6 +296,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         nestedVariableNames.add(ctx.getText());
         String variableName = currentVariableDictionary.get(ctx.getText());
+        currentVariablesPerProduction.addToVaribles(ctx.getText());
         if (variableName != null)
         {
             return workingMemoryTree.getSubtree(variableName);
@@ -398,6 +409,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         if (ctx.attr_value_make() != null && ctx.variable() != null)
         {
             SymbolTree attachPoint = ctx.variable().accept(this);
+            if (currentVariablesPerProduction.variablesContains(ctx.variable().getText())) {
+                currentVariablesPerProduction.addToRejected(ctx.variable().getText());
+            }
 
             if (attachPoint == null)
             {
@@ -442,7 +456,11 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     @Override
     public SymbolTree visitFunc_call(SoarParser.Func_callContext ctx) {
-        return null;
+        if (!ctx.func_name().getText().equals("halt")) {
+            return new SymbolTree("ADD_NODE");
+        } else {
+            return null;
+        }
     }
 
     /**
