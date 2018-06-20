@@ -22,23 +22,24 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private HashMap<String, Integer> globalToIndex;
     private final Set<String> _booleanGlobals;
     private final ArrayList<SymbolTree> _operators;
-    private SymbolTree currentOperators;
+    private SymbolTree _currentOperators;
     private int OPERATOR_INDEX = 0;
     private final int NUM_OPERATORS;
     private final Map<String, Map<String, String>> _variableDictionary;
     private Integer _locationCounter = 0;
     Document ourDocument = new Document(new PrototypeDocument());
-    private Template lastTemplate = null;
+    private Template _lastTemplate = null;
     private final Set<String> _templateNames = new HashSet<>();
-    private boolean unaryOrBinaryFlag = false;
-    private boolean learnInverseAssignments = false;
+    private boolean _unaryOrBinaryFlag = false;
+    private boolean _learnInverseAssignments = false;
     private ArrayList<ArrayList<String>> _operatorsAttributesAndValues;
     private ArrayList<ArrayList<String>> _stateAttributesAndValues;
-    private int templateIndex = 1;
+    private int _templateIndex = 1;
     private HashSet<String> _productionVariables;
     private LinkedList<Integer> _takenValues = new LinkedList<>();
     private Map<String, ProductionVariables> _actualVariablesPerProduction;
     private HashSet<String> _retractOperatorIndexes;
+    private Map<Integer, String> _operatorIDToInverseActions = new HashMap<>();
 
     public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators, ArrayList<ArrayList<String>> operatorsAttributesAndValues, ArrayList<ArrayList<String>> stateAttributesAndValues, HashMap<String, ProductionVariables> actualVariablesPerProduction) {
         _globals = stringAttributeNames;
@@ -497,9 +498,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         Location startLocation = makeLocationWithCoordinates(currentTemplate, "Start", startStateID, true, true, -152, 0, -200, -32);
 
-        Edge startRunEdge = makeEdge(currentTemplate, startLocation, runGuardLocation, null, null, "Run_Rule?", new Integer[]{40, -32}, null, null, "addToStackCondition(" + templateIndex + ")", new Integer[]{40, 0});
+        Edge startRunEdge = makeEdge(currentTemplate, startLocation, runGuardLocation, null, null, "Run_Rule?", new Integer[]{40, -32}, null, null, "addToStackCondition(" + _templateIndex + ")", new Integer[]{40, 0});
 
-        currentOperators = _operators.get(OPERATOR_INDEX);
+        _currentOperators = _operators.get(OPERATOR_INDEX);
         OPERATOR_INDEX++;
 
         Node conditionSide = ctx.condition_side().accept(this);
@@ -509,10 +510,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         if (conditionSide.getProperty("inverseGuards") != null) {
             inverseGuard = getText(conditionSide, "inverseGuards");
-            learnInverseAssignments = true;
+            _learnInverseAssignments = true;
         } else {
             inverseGuard = null;
-            learnInverseAssignments = false;
+            _learnInverseAssignments = false;
         }
 
         Node actionSide = ctx.action_side().accept(this);
@@ -547,7 +548,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         boolean halt = getText(actionSide, "hasHalt").equals("yes");
 
         int xTextLocation = lastLocationCoords[0] + 17;
-        Location lastLocation = addHorizontalCondition(currentTemplate, runGuardLocation, startLocation, lastLocationCoords, "stackCondition[stackConditionIndex] == " + templateIndex + " &&\n!addOperator",guardCollection[0], "removeStackCondition()", xTextLocation, guardCollection.length <= 1);
+        Location lastLocation = addHorizontalCondition(currentTemplate, runGuardLocation, startLocation, lastLocationCoords, "stackCondition[stackConditionIndex] == " + _templateIndex + " &&\n!addOperator",guardCollection[0], "removeStackCondition()", xTextLocation, guardCollection.length <= 1);
 
         lastLocation = addVerticalConditions(currentTemplate, lastLocation, lastLocationCoords, guardCollection, startLocation, "removeStackCondition()", xTextLocation, false);
 
@@ -565,13 +566,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 String[] inverseGuardCollection = inverseGuard.split(" :: ");
                 Location lastAssignmentLocation = lastLocation;
                 int lastAssignmentLocationXCoord = lastLocationCoords[0];
-                lastLocation = moveToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Retract", "Run_Rule?",null, "addToStackRetract(" + templateIndex + ")");
+                lastLocation = moveToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Retract", "Run_Rule?",null, "addToStackRetract(" + _templateIndex + ")");
                 makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, "Halt?", new Integer[]{lastLocationCoords[0] - 50, lastLocationCoords[1] - 100}, null, null, null, null, new Integer[]{lastLocationCoords[0], lastLocationCoords[1] - 120, -152, lastLocationCoords[1] - 120});
                 xTextLocation = lastLocationCoords[0] + 17;
                 int extraShiftForRetraction = assignmentCollection.length <= 1 ? 0 : (inverseGuardCollection.length - assignmentCollection.length + 1) * 110;
                 int[] runRetractionAssignmentsCoords = new int[]{lastLocationCoords[0], lastLocationCoords[1] + inverseGuardCollection.length * 110 + extraShiftForRetraction};
                 Location runRetractionAssignmentsLocation = makeLocationWithCoordinates(currentTemplate, "Run_Retraction_Assignments", getCounter(), true, false, runRetractionAssignmentsCoords[0], runRetractionAssignmentsCoords[1], runRetractionAssignmentsCoords[0] - 220, runRetractionAssignmentsCoords[1] - 30);
-                lastLocation = addHorizontalCondition(currentTemplate, lastLocation, runRetractionAssignmentsLocation, lastLocationCoords, "!addOperator &&\nstackRetractIndex > -1 &&\nstackRetract[stackRetractIndex] == " + templateIndex + " &&\nisRetracting &&\nstackConditionIndex == -1", inverseGuardCollection[0], null, xTextLocation, inverseGuardCollection.length <= 1);
+                lastLocation = addHorizontalCondition(currentTemplate, lastLocation, runRetractionAssignmentsLocation, lastLocationCoords, "!addOperator &&\nstackRetractIndex > -1 &&\nstackRetract[stackRetractIndex] == " + _templateIndex + " &&\nisRetracting &&\nstackConditionIndex == -1", inverseGuardCollection[0], null, xTextLocation, inverseGuardCollection.length <= 1);
                 lastLocation = addVerticalConditions(currentTemplate, lastLocation, lastLocationCoords, inverseGuardCollection, runRetractionAssignmentsLocation, null, xTextLocation, extraShiftForRetraction > 0);
                 makeEdgeWithNails(currentTemplate, lastLocation, lastAssignmentLocation, null, null, null, null, "doesContain == 1", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 85}, "removeStackRetract()", new Integer[]{lastLocationCoords[0] + 75, lastLocationCoords[1] + 120}, new Integer[]{lastLocationCoords[0] + 51, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, lastLocationCoords[1] + 110, lastLocationCoords[0] + 400, -110, lastAssignmentLocationXCoord, -110});
                 lastLocation = runRetractionAssignmentsLocation;
@@ -607,7 +608,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         currentTemplate.setProperty("declaration", currentTemplateDeclaration.toString());
 
-        templateIndex++;
+        _templateIndex++;
         return null;
     }
 
@@ -623,7 +624,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         Node stateImpCondNode = ctx.state_imp_cond().accept(this);
         guards.add(getText(stateImpCondNode, "conds"));
-        if (inverseGuards != null && getText(stateImpCondNode, "i-supported").equals("true")) {
+        if (getText(stateImpCondNode, "i-supported").equals("true")) {
             inverseGuards.add(getText(stateImpCondNode, "inverseConds"));
         } else {
             inverseGuards = null;
@@ -733,7 +734,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 StringBuilder inverseValue = new StringBuilder("tempValue");
                 StringBuilder operator = new StringBuilder("addOp = ");
 
-                SymbolTree operatorTree = currentOperators.getSubtreeNoError(idTest);
+                SymbolTree operatorTree = _currentOperators.getSubtreeNoError(idTest);
                 if (operatorTree != null) {
                     operator.append("finalOp,\n");
                 } else {
@@ -742,7 +743,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
                 String containString = "doesContain = 0";
 
-                if (attrPath.length() >= 0 && attrPath.equals("operator")) {
+                if (attrPath.contains("operator")) {
                     inverseStateVariableComparisons = null;
                 }
 
@@ -976,11 +977,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         StringBuilder assignments = new StringBuilder();
         StringBuilder inverseAssignments = new StringBuilder();
         int numInverseAssignments = 0;
+        String lastAssignment = null;
         for (SoarParser.ActionContext actionContext : ctx.action()) {
             Node actionNode = actionContext.accept(this);
             if (!getText(actionNode, "assignments").equals("")) {
+                if (lastAssignment != null) {
+                    if (lastAssignment.contains("addOp")) {
+                        assignments.append(" :: ");
+                    } else{
+                        assignments.append(",\n");
+                    }
+                }
                 assignments.append(getText(actionNode, "assignments"));
-                assignments.append(",\n");
+                lastAssignment = getText(actionNode, "assignments");
             }
             if (actionNode.getProperty("inverseAssignments") != null) {
                 inverseAssignments.append(getText(actionNode, "inverseAssignments"));
@@ -1035,7 +1044,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private String checkAndGetOperatorID(String variableName) {
-        SymbolTree operatorTree = currentOperators.getSubtreeNoError(variableName);
+        SymbolTree operatorTree = _currentOperators.getSubtreeNoError(variableName);
         String returnText;
         if (operatorTree != null) {
             int operatorID = operatorTree.getIDFromTree();
@@ -1067,7 +1076,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     .collect(Collectors.joining("_"));
             String leftSide = prefix + "_" + suffix;
             String attribute = "tempAttribute = " + leftSide + ",\n";
-            if (learnInverseAssignments && !leftSide.startsWith("state_operator")) {
+            if (_learnInverseAssignments && !leftSide.startsWith("state_operator")) {
                 attributeCollection.add(attribute);
             }
 
@@ -1098,14 +1107,30 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
         }
 
+        StringBuilder inverseOperatorCollectionStringBuilder = new StringBuilder(inverseOperatorCollection.stream().collect(Collectors.joining(" :: ")));
+        String inverseOperatorCollectionString = inverseOperatorCollectionStringBuilder.toString();
+        if (!inverseOperatorCollectionString.equals("")) {
+            String stringID;
+            int indexOfID = inverseOperatorCollectionString.indexOf("addOp");
+            if (indexOfID == -1) {
+                indexOfID = inverseOperatorCollectionString.indexOf("operators[");
+                indexOfID += 10;
+                stringID = inverseOperatorCollectionString.substring(indexOfID, inverseOperatorCollectionString.indexOf("]", indexOfID));
+            } else {
+                indexOfID += 8;
+                stringID = inverseOperatorCollectionString.substring(indexOfID, inverseOperatorCollectionString.indexOf(",", indexOfID));
+            }
+            Integer intID = Integer.parseInt(stringID) + 1;
+            _operatorIDToInverseActions.put(intID, inverseOperatorCollectionString);
+        }
+
         String returnInverseStateAssignments;
         int numInverseAssignments = 0;
-        if (learnInverseAssignments) {
+        if (_learnInverseAssignments) {
             final String setRemoveBoolean = "removeOperator = true";
             StringBuilder inverseStateAssignmentsCollection = new StringBuilder(attributeCollection.stream().map(e -> operator + e + setRemoveBoolean).collect(Collectors.joining(" :: ")));
-            StringBuilder inverseOperatorCollectionString = new StringBuilder(inverseOperatorCollection.stream().collect(Collectors.joining(" :: ")));
-            inverseStateAssignmentsCollection.append(inverseOperatorCollectionString.length() > 0 && inverseStateAssignmentsCollection.length() > 0 ? " :: " : "");
-            inverseStateAssignmentsCollection.append(inverseOperatorCollectionString);
+            inverseStateAssignmentsCollection.append(inverseOperatorCollectionStringBuilder.length() > 0 && inverseStateAssignmentsCollection.length() > 0 ? " :: " : "");
+            inverseStateAssignmentsCollection.append(inverseOperatorCollectionStringBuilder);
             returnInverseStateAssignments = inverseStateAssignmentsCollection.toString();
 
             numInverseAssignments += attributeCollection.size();
@@ -1132,37 +1157,72 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnString.toString();
     }
 
+    private void addToInverseAssignments(LinkedList<String> inverseAssignmentsCollection, SymbolTree operator, String operatorID, String thisOperatorIndex) {
+        LinkedList<SymbolTree> attributesAndPreferences = operator.DFSForAttributeValues(true);
+        for (SymbolTree attributeOrPreference : attributesAndPreferences) {
+            StringBuilder inverseAssignments = new StringBuilder();
+            if (attributeOrPreference.name.startsWith("is")) {
+                if (attributeOrPreference.isLeaf()) {
+                    inverseAssignments.append("operators[" + thisOperatorIndex + "].operator." + attributeOrPreference.name + " = false,\nremoveOperator = false");
+                } else {
+                    String thatOperatorIndex = getIndexFromID(attributeOrPreference.getChildren().get(0).name);
+                    if (attributeOrPreference.name.equals("isBetterTo")) {
+                        inverseAssignments.append(functionCallWithTwoIDs("removeBetterFrom", thisOperatorIndex, thatOperatorIndex));
+                    } else if (attributeOrPreference.name.equals("isUnaryOrBinaryIndifferentTo")) {
+                        inverseAssignments.append(functionCallWithTwoIDs("removeBinaryIndifferentFrom", thisOperatorIndex, thatOperatorIndex));
+                    }
+                }
+            } else {
+                inverseAssignments.append("addOp = " + operatorID + ",\n");
+                int attributeIndex = Integer.parseInt(attributeOrPreference.name.substring(1));
+                inverseAssignments.append("tempAttribute = state_operator_" + simplifiedString(_operatorsAttributesAndValues.get(attributeIndex).get(0)) + ",\n");
+                inverseAssignments.append("removeOperator = true");
+            }
+            inverseAssignmentsCollection.add(inverseAssignments.toString());
+        }
+    }
+
+    private SymbolTree findOperator(int index) {
+        for (SymbolTree production : _operators) {
+            for (SymbolTree operator : production.getChildren()) {
+                if (operator.getIDFromTree() == index) {
+                    return operator;
+                }
+            }
+        }
+        return null;
+    }
+
     private void getInverseOperator(Node rightSideElement, LinkedList<String> inverseAssignmentsCollection) {
         if (rightSideElement.getProperty("var") != null) {
-            SymbolTree operator = currentOperators.getSubtreeNoError(getText(rightSideElement, "var"));
+            SymbolTree operator = _currentOperators.getSubtreeNoError(getText(rightSideElement, "var"));
             if (operator != null && operator.getSubtreeNoError("create") != null) {
                 String operatorID = getIDFromProperty(operator.name);
                 String thisOperatorIndex = "" + (Integer.parseInt(operatorID) - 1);
                 _retractOperatorIndexes.add(operatorID);
 
-                LinkedList<SymbolTree> operatorAttributesAndPreferences = operator.DFSForAttributeValues(true);
-                for (int i = 0; i < operatorAttributesAndPreferences.size(); i++) {
-                    SymbolTree attributesOrPreference = operatorAttributesAndPreferences.get(i);
-                    StringBuilder inverseAssignments = new StringBuilder();
-                    if (attributesOrPreference.name.startsWith("is")) {
-                        if (attributesOrPreference.isLeaf()) {
-                            inverseAssignments.append("operators[" + thisOperatorIndex +"].operator." + attributesOrPreference.name + " = false,\nremoveOperator = false");
-                        } else {
-                            String thatOperatorIndex = getIndexFromID(attributesOrPreference.getChildren().get(0).name);
-                            if (attributesOrPreference.name.equals("isBetterTo")){
-                                inverseAssignments.append(functionCallWithTwoIDs("removeBetterFrom", thisOperatorIndex, thatOperatorIndex));
-                            } else if (attributesOrPreference.name.equals("isUnaryOrBinaryIndifferentTo")) {
-                                inverseAssignments.append(functionCallWithTwoIDs("removeBinaryIndifferentFrom", thisOperatorIndex, thatOperatorIndex));
-                            }
+                addToInverseAssignments(inverseAssignmentsCollection, operator, operatorID, thisOperatorIndex);
+                SymbolTree nestedRemoveTree = operator.getSubtreeNoError("nestedRemoveOperator");
+                if (nestedRemoveTree != null) {
+                    Integer inverseOperatorID = Integer.parseInt(nestedRemoveTree.getChildren().get(0).name);
+                    if (_operatorIDToInverseActions.get(inverseOperatorID) != null) {
+                        String[] additionalInverseAssignments = _operatorIDToInverseActions.get(inverseOperatorID).split(" :: ");
+                        for (String nextInverseAssignment : additionalInverseAssignments) {
+                            inverseAssignmentsCollection.add(nextInverseAssignment);
                         }
                     } else {
-                        inverseAssignments.append("addOp = " + operatorID + ",\n");
-                        int attributeIndex = Integer.parseInt(attributesOrPreference.name.substring(1));
-                        inverseAssignments.append("tempAttribute = state_operator_" + simplifiedString(_operatorsAttributesAndValues.get(attributeIndex).get(0)) + ",\n");
-                        inverseAssignments.append("removeOperator = true");
+                        String inverseOperatorIDString = inverseOperatorID + "";
+                        String inverseOperatorIndex = (inverseOperatorID - 1) + "";
+                        SymbolTree otherOperator = findOperator(inverseOperatorID);
+                        LinkedList<String> otherOperatorInverseAssignments = new LinkedList<>();
+                        addToInverseAssignments(otherOperatorInverseAssignments, otherOperator, inverseOperatorIDString, inverseOperatorIndex);
+                        _operatorIDToInverseActions.put(inverseOperatorID, otherOperatorInverseAssignments.stream().collect(Collectors.joining(" :: ")));
+                        for (String inverseAssignment : otherOperatorInverseAssignments) {
+                            inverseAssignmentsCollection.add(inverseAssignment);
+                        }
                     }
-                    inverseAssignmentsCollection.add(inverseAssignments.toString());
                 }
+
             }
         }
     }
@@ -1351,7 +1411,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private String getIDFromProperty(String variableName) {
-        SymbolTree otherOperator = currentOperators.getSubtree(variableName);
+        SymbolTree otherOperator = _currentOperators.getSubtree(variableName);
         String otherOperatorID = otherOperator.getSubtree("create").getSubtree("id").getChildren().get(0).name;
         return otherOperatorID;
     }
@@ -1397,7 +1457,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     @Override
     public Node visitUnary_or_binary_pref(SoarParser.Unary_or_binary_prefContext ctx) {
         Node prefNode = null;
-        String isWhat = UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0), unaryOrBinaryFlag);
+        String isWhat = UtilityForVisitors.unaryOrBinaryToString(ctx.getText().charAt(0), _unaryOrBinaryFlag);
         if (isWhat != null) {
             prefNode = textAsNode("unaryBinaryPref", isWhat);
         }
@@ -1407,9 +1467,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     public Node visitValue_pref_clause(SoarParser.Value_pref_clauseContext ctx) {
         String preference = null;
         if (ctx.unary_or_binary_pref() != null) {
-            unaryOrBinaryFlag = true;
+            _unaryOrBinaryFlag = true;
             preference = getText(ctx.unary_or_binary_pref().accept(this), "unaryBinaryPref");
-            unaryOrBinaryFlag = false;
+            _unaryOrBinaryFlag = false;
         } else if (ctx.unary_pref() != null) {
             preference = getText(ctx.unary_pref().accept(this), "unaryPref");
         }
@@ -1444,8 +1504,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     private Template makeTemplate(String name) {
         Template t = ourDocument.createTemplate();
-        ourDocument.insert(t, lastTemplate);
-        lastTemplate = t;
+        ourDocument.insert(t, _lastTemplate);
+        _lastTemplate = t;
         t.setProperty("name", name);
         return t;
     }
@@ -1579,14 +1639,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private String[] makeAttributeValueTemplates(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
         StringBuilder instantiationsCollection = new StringBuilder();
         StringBuilder systemProcesses = new StringBuilder();
-        final AtomicInteger i = new AtomicInteger(1);
-        for (Attribute_Value_Wrapper attribute_value_wrapper : attributeToTemplate.values()) {
-            String newAVPair = "AV" + i.getAndIncrement();
+        for (Map.Entry<String, Attribute_Value_Wrapper> stringAttribute_value_wrapperEntry : attributeToTemplate.entrySet()) {
+            String avName = stringAttribute_value_wrapperEntry.getKey();
+            Attribute_Value_Wrapper avWrapper = stringAttribute_value_wrapperEntry.getValue();
+
+            String newAVPair = "AV_" + avName;
             systemProcesses.append(newAVPair + ", ");
             instantiationsCollection.append(newAVPair);
             instantiationsCollection.append(" = ");
             instantiationsCollection.append("Attribute_Value(");
-            instantiationsCollection.append(attribute_value_wrapper.getNumValues() + ", " + attribute_value_wrapper.getAttributeIndex() + ", " + attribute_value_wrapper.getOperatorId());
+            instantiationsCollection.append(avWrapper.getNumValues() + ", " + avWrapper.getAttributeIndex() + ", " + avWrapper.getOperatorId());
             instantiationsCollection.append(");\n");
         }
         return new String[]{instantiationsCollection.toString(), systemProcesses.toString()};

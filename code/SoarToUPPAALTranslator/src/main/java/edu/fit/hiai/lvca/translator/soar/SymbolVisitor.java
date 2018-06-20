@@ -3,6 +3,7 @@ package edu.fit.hiai.lvca.translator.soar;
 import edu.fit.hiai.lvca.antlr4.SoarBaseVisitor;
 import edu.fit.hiai.lvca.antlr4.SoarParser;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ParseTree;
 
 import java.util.*;
@@ -33,6 +34,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private boolean unaryOrBinaryFlag = false;
     private HashMap<String, ProductionVariables> actualVariablesInProduction = new HashMap<>();
     private ProductionVariables currentVariablesPerProduction;
+    private boolean isProductionOSupported;
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -98,6 +100,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         currentVariablesPerProduction = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         currentOperators = new HashMap<>();
+        isProductionOSupported = false;
         ctx.condition_side().accept(this);
         ctx.action_side().accept(this);
         SymbolTree parent = new SymbolTree(ctx.sym_constant().getText());
@@ -142,7 +145,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             workingMemoryTree.addChild(child);
         }
 
-//        ctx.attr_value_tests().forEach(avt -> workingMemoryTree.addChild(avt.accept(this)));
         return null;
     }
 
@@ -166,7 +168,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         for(SoarParser.Attr_value_testsContext avt : ctx.attr_value_tests())
         {
             SymbolTree child = avt.accept(this);
-            SymbolTree childWithChildren = null;
+            SymbolTree childWithChildren;
             if (!child.getChildren().get(0).name.equals("withChildren")) {
                 childWithChildren = child.getChildren().get(1);
                 child = child.getChildren().get(0);
@@ -212,8 +214,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             }
         }
 
-//        ctx.value_test().forEach(vt -> vt.accept(this));
-
         for (String nestedVariableName : nestedVariableNames)
         {
             if (!currentVariableDictionary.containsKey(nestedVariableName))
@@ -241,6 +241,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         SymbolTree returnTree = new SymbolTree("pickTheTree");
         returnTree.addChild(subtree);
         returnTree.addChild(subtreeWithChildren);
+        if (!isProductionOSupported) {
+            isProductionOSupported = ctx.attr_test().stream().map(RuleContext::getText).collect(Collectors.joining("_")).contains("operator");
+        }
         return returnTree;
     }
 
@@ -511,6 +514,17 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
                         rightHandTree.addChild(createBranch);
                         currentOperators.put(rightHandTree.name, rightHandTree);
+                        if (isProductionOSupported) {
+                            for (SymbolTree operator : currentOperators.values()) {
+                                SymbolTree updateTree = operator.getSubtreeNoError("update");
+                                if (updateTree != null) {
+                                    SymbolTree nestedTemp = new SymbolTree("nestedRemoveOperator");
+                                    nestedTemp.addChild(new SymbolTree("" + (OPERATOR_ID - 1)));
+                                    updateTree.addChild(nestedTemp);
+                                }
+                            }
+
+                        }
                     } else {
                         SymbolTree operatorTree  = currentOperators.get(rightHandTree.name);
                         if (operatorTree.pathTo("update") == null) {
@@ -550,6 +564,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                                 .forEach(subtree::addChild);
                     }
                 }
+
 
             }
         }
