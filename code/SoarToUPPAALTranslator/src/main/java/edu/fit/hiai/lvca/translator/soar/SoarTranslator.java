@@ -91,89 +91,13 @@ public class SoarTranslator
         }
     }
 
-    private static boolean compareUpdateToCreate(SymbolTree update, SymbolTree create, ArrayList<ArrayList<String>> operatorAttributesAndValues) {
-        for (SymbolTree attributeTree : update.getChildren()) {
-            if (attributeTree.name.equals("update")) {
-                continue;
-            }
-            SymbolTree otherChildSubtree = create.getSubtreeNoError(attributeTree.name);
-
-            if (otherChildSubtree == null) {
-                return false;
-            } else {
-                for (SymbolTree valueTree : attributeTree.getChildren()) {
-                    SymbolTree searchSourceOther = otherChildSubtree.getSubtreeNoError(valueTree.name);
-                    if (searchSourceOther == null) {
-                        return false;
-                     }
-                }
-            }
+    private static AugmentedSymbolTree cleanAttributesAndValues(AugmentedSymbolTree attributesAndValues, LinkedList<Integer> takenValues) {
+        AugmentedSymbolTree newAttributesAndValues = new AugmentedSymbolTree("state");
+        LinkedList<AugmentedEdge> productions = attributesAndValues.getEdgeNameToEdge();
+        for (AugmentedEdge individualProduction : productions) {
+            individualProduction.getValues().get(0).cleanAndJoin(newAttributesAndValues, individualProduction.getName(), takenValues);
         }
-        return true;
-    }
-
-    private static void replaceAttributeValuesWithIndexes(SymbolTree operatorTree, SymbolVisitor sv) {
-        LinkedList<Integer> removeList = new LinkedList<>();
-        for (int i = 0; i < operatorTree.getChildren().size(); i++) {
-            SymbolTree topValue = operatorTree.getChildren().get(i);
-            if (!topValue.name.equals("update") && topValue.name.charAt(0) != '[') {
-                for (SymbolTree valueTree : topValue.getChildren()) {
-                    sv.createAttributeValuePair(topValue.name, valueTree.name, operatorTree);
-                }
-                removeList.add(i);
-            }
-        }
-        int decrementIndexes = 0;
-        while(removeList.size() != 0) {
-            operatorTree.getChildren().remove(removeList.poll() - decrementIndexes);
-            decrementIndexes++;
-        }
-    }
-
-    private static SymbolTree checkCreateContinue(String name, SymbolTree base, boolean continueLoop[]) {
-        SymbolTree checkIfExists = base.getSubtreeNoError(name);
-        if (checkIfExists == null) {
-            checkIfExists = new SymbolTree(name);
-            base.addChild(checkIfExists);
-            continueLoop[0] = true;
-        }
-        return checkIfExists;
-    }
-
-    private static void expandOperators(ArrayList<SymbolTree> operators, SymbolVisitor sv) {
-        SymbolTree createOperators = new SymbolTree("create");
-        SymbolTree updateOperators = new SymbolTree("update");
-        for (SymbolTree productionTree : operators) {
-            for (SymbolTree operatorTree : productionTree.getChildren()) {
-                if (operatorTree.getSubtreeNoError("create") != null) {
-                    createOperators.addChild(operatorTree);
-                } else {
-                    SymbolTree updateChild = operatorTree.getSubtreeNoError("update");
-                    if (updateChild != null && updateChild.getChildren().size() != 0) {
-                        updateOperators.addChild(operatorTree);
-                    }
-                    replaceAttributeValuesWithIndexes(operatorTree, sv);
-                }
-            }
-        }
-        boolean keepUpdating[] = new boolean[1];
-        keepUpdating[0] = true;
-        while (keepUpdating[0]) {
-            keepUpdating[0] = false;
-            for (SymbolTree baseUpdate : updateOperators.getChildren()) {
-                for (SymbolTree baseCreate : createOperators.getChildren()) {
-                    if (compareUpdateToCreate(baseUpdate, baseCreate, sv.getOperatorAttributesAndValues())) {
-                        SymbolTree updateBranch = baseUpdate.getSubtree("update");
-                        for (SymbolTree baseValueUpdate : updateBranch.getChildren()) {
-                            SymbolTree baseValueCreate = checkCreateContinue(baseValueUpdate.name, baseCreate, keepUpdating);
-                            for (SymbolTree lowerValueUpdate : baseValueUpdate.getChildren()) {
-                                checkCreateContinue(lowerValueUpdate.name, baseValueCreate, keepUpdating);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        return newAttributesAndValues;
     }
 
     /**
@@ -191,11 +115,9 @@ public class SoarTranslator
         SymbolVisitor symbolVisitor = new SymbolVisitor(soarParseTree.soar());
         Set<String> stringAttributeNames = symbolVisitor.getStringSymbols();
         Set<String> boolAttributeNames = symbolVisitor.getBooleanSymbols();
-        ArrayList<SymbolTree> operators = symbolVisitor.getOperators();
-        ArrayList<ArrayList<String>> operatorsAttributesAndValues = symbolVisitor.getOperatorAttributesAndValues();
-        ArrayList<ArrayList<String>> stateAttributesAndValues = symbolVisitor.getStateAttributesAndValues();
         HashMap<String, ProductionVariables> actualVariablesPerProduction = symbolVisitor.getActualVariablesInProduction();
-        int numOperators = symbolVisitor.getOPERATOR_ID();
+        AugmentedSymbolTree attributesAndValues = symbolVisitor.getAttributesAndValues();
+        int numOperators = symbolVisitor.getOperatorCount();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
 
@@ -206,9 +128,10 @@ public class SoarTranslator
                 .map(name -> name.replace("-", "_"))
                 .collect(Collectors.toSet());
 
-        expandOperators(operators, symbolVisitor);
+        LinkedList<Integer> takenValues = new LinkedList<>();
+        attributesAndValues = cleanAttributesAndValues(attributesAndValues, takenValues);
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, operators, numOperators, operatorsAttributesAndValues, stateAttributesAndValues, actualVariablesPerProduction));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, attributesAndValues, takenValues));
     }
 
     /**

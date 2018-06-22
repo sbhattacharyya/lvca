@@ -20,17 +20,16 @@ import java.util.stream.Collectors;
  */
 class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 {
-    private int OPERATOR_ID = 1;
+    private int operatorCount = 0;
     private Set<String> stringSymbols = new HashSet<>();
     private Set<String> booleanSymbols = new HashSet<>();
     private SymbolTree workingMemoryTree = new SymbolTree("state");
     private Map<String, String> currentVariableDictionary;
     private Set<String> nestedVariableNames = new HashSet<>();
     private Map<String, Map<String, String>> globalVariableDictionary = new HashMap<>();
-    private ArrayList<SymbolTree> operators = new ArrayList<>();
-    private Map<String, SymbolTree> currentOperators;
-    private ArrayList<ArrayList<String>> operatorAttributesAndValues = new ArrayList<>();
-    private ArrayList<ArrayList<String>> stateAttributesAndValues = new ArrayList<>();
+    private AugmentedSymbolTree attributesAndValues = new AugmentedSymbolTree("state");
+    private AugmentedSymbolTree productionSource;
+    private AugmentedEdge currentBranchInAttributesAndValues;
     private boolean unaryOrBinaryFlag = false;
     private HashMap<String, ProductionVariables> actualVariablesInProduction = new HashMap<>();
     private ProductionVariables currentVariablesPerProduction;
@@ -77,15 +76,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return globalVariableDictionary;
     }
 
-    ArrayList<SymbolTree> getOperators() { return operators; }
-
-    ArrayList<ArrayList<String>> getOperatorAttributesAndValues() { return operatorAttributesAndValues; }
-
-    ArrayList<ArrayList<String>> getStateAttributesAndValues() { return stateAttributesAndValues; }
 
     HashMap<String, ProductionVariables> getActualVariablesInProduction() { return actualVariablesInProduction; }
 
-    int getOPERATOR_ID() { return OPERATOR_ID; }
+    AugmentedSymbolTree getAttributesAndValues() { return attributesAndValues; }
+
+    int getOperatorCount() { return operatorCount; }
 
     /**
      * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
@@ -97,17 +93,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitSoar_production(SoarParser.Soar_productionContext ctx)
     {
+        productionSource = attributesAndValues.addEdgeWithoutValues(ctx.sym_constant().getText()).addSingleValue("state");
         currentVariablesPerProduction = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
-        currentOperators = new HashMap<>();
         isProductionOSupported = false;
         ctx.condition_side().accept(this);
         ctx.action_side().accept(this);
-        SymbolTree parent = new SymbolTree(ctx.sym_constant().getText());
-        for (Map.Entry<String, SymbolTree> stringSymbolTreeEntry : currentOperators.entrySet()) {
-            parent.addChild(stringSymbolTreeEntry.getValue());
-        }
-        operators.add(parent);
 
         // globalVariableDictionary: production name -> variable id -> variable path
 
@@ -139,6 +130,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         // Call for Side Effects
         for (SoarParser.Attr_value_testsContext attr_value_testsContext : ctx.attr_value_tests()) {
+
             SymbolTree child = attr_value_testsContext.accept(this);
             //gets tree without children
             child = child.getChildren().get(0);
@@ -168,21 +160,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         for(SoarParser.Attr_value_testsContext avt : ctx.attr_value_tests())
         {
             SymbolTree child = avt.accept(this);
-            SymbolTree childWithChildren;
             if (!child.getChildren().get(0).name.equals("withChildren")) {
-                childWithChildren = child.getChildren().get(1);
                 child = child.getChildren().get(0);
             } else {
-                childWithChildren = child.getChildren().get(0);
                 child = child.getChildren().get(1);
             }
             attachPoint.addChild(child);
-
-            SymbolTree operator = currentOperators.get(ctx.id_test().getText());
-            SymbolTree attributeValue = childWithChildren.getChildren().get(0);
-            if (operator != null) {
-                operator.addChild(attributeValue);
-            }
         }
 
         return null;
@@ -220,13 +203,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             {
                 // getFirstLeaf() because subtree is really a LinkedList and we want the last element
                 currentVariableDictionary.put(nestedVariableName, getFirstLeaf(subtree));
-            }
-            if (subtree.name.equals("operator")) {
-                if (!currentOperators.containsKey(nestedVariableName)) {
-                    SymbolTree child = new SymbolTree(nestedVariableName);
-                    child.addChild(new SymbolTree("update"));
-                    currentOperators.put(nestedVariableName, child);
-                }
             }
         }
 
@@ -333,73 +309,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return new SymbolTree(result);
     }
 
-    private int findAttributeIndex(String rootName, SymbolTree operator) {
-        ArrayList<ArrayList<String>> operatorOrState = operator == null ? stateAttributesAndValues : operatorAttributesAndValues;
-        int attributeIndex = -1;
-        for (int i = 0; i < operatorOrState.size(); i++) {
-            if (operatorOrState.get(i).get(0).equals(rootName)) {
-                attributeIndex = i;
-                break;
-            }
-        }
-        return attributeIndex;
-    }
-
-    private int getAttributeIndex(String rootName, SymbolTree operator) {
-        ArrayList<ArrayList<String>> operatorOrState = operator == null ? stateAttributesAndValues : operatorAttributesAndValues;
-        int attributeIndex = findAttributeIndex(rootName, operator);
-        if (attributeIndex == -1) {
-            ArrayList<String> newest = new ArrayList<>();
-            newest.add(rootName);
-            operatorOrState.add(newest);
-            attributeIndex = operatorOrState.size() - 1;
-        }
-        return attributeIndex;
-    }
-
-    private int findValueIndex(String value, int attributeIndex, SymbolTree operator) {
-        int valueIndex = -1;
-        ArrayList<String> values = operator == null ? stateAttributesAndValues.get(attributeIndex) : operatorAttributesAndValues.get(attributeIndex);
-        for (int i = 1; i < values.size(); i++) {
-            if (values.get(i).equals(value)) {
-                valueIndex = i;
-                break;
-            }
-        }
-        return valueIndex;
-    }
-
-    private int getValueIndex(String value, int attributeIndex, SymbolTree operator) {
-        ArrayList<ArrayList<String>> operatorOrState = operator == null ? stateAttributesAndValues : operatorAttributesAndValues;
-        int valueIndex = findValueIndex(value, attributeIndex, operator);
-        if (valueIndex == -1) {
-            operatorOrState.get(attributeIndex).add(value);
-            valueIndex = operatorOrState.get(attributeIndex).size() - 1;
-        }
-        return valueIndex;
-    }
-
-    public void createAttributeValuePair(String attributeName, String valueName, SymbolTree operator) {
-        if (valueName.charAt(0) == '<') {
-            valueName = currentVariableDictionary.get(valueName);
-        }
-        int attributeIndex = getAttributeIndex(attributeName, operator);
-        int valueIndex = getValueIndex(valueName, attributeIndex, operator);
-        if (operator != null) {
-            SymbolTree attributeTree = operator.getSubtreeIgnoreUpdateAndCreate("[" + attributeIndex);
-            if (attributeTree == null) {
-                attributeTree = new SymbolTree("[" + attributeIndex);
-                attributeTree.addChild(new SymbolTree(valueIndex + "]"));
-                operator.addChild(attributeTree);
-            } else {
-                SymbolTree valueTree = attributeTree.getSubtreeNoError(valueIndex + "]");
-                if (valueTree == null) {
-                    attributeTree.addChild(new SymbolTree(valueIndex + "]"));
-                }
-            }
-        }
-    }
-
     /**
      * Track changes to working memory, update the SymbolTree
      *
@@ -423,35 +332,23 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                         ((SoarParser.Soar_productionContext)ctx.parent.parent).sym_constant().getText());
                 System.exit(1);
             }
+
+            AugmentedSymbolTree source;
+            if (attachPoint.name.equals("state")) {
+                source = productionSource;
+            } else {
+                source = productionSource.findTree(ctx.variable().getText());
+            }
+
             for (SoarParser.Attr_value_makeContext attr_value_makeContext : ctx.attr_value_make()) {
+                for (SoarParser.Variable_or_sym_constantContext variable_or_sym_constantContext : attr_value_makeContext.variable_or_sym_constant()) {
+                    currentBranchInAttributesAndValues = source.addEdgeWithoutValues(variable_or_sym_constantContext.getText());
+                }
                 SymbolTree child = attr_value_makeContext.accept(this);
-                SymbolTree operator = null;
-                if (attachPoint.name.equals("operator")) {
-                    for (Map.Entry<String, SymbolTree> stringSymbolTreeEntry : currentOperators.entrySet()) {
-                        if (stringSymbolTreeEntry.getKey().equals(ctx.variable().getText())) {
-                            operator = stringSymbolTreeEntry.getValue();
-                            break;
-                        }
-                    }
-                }
-
-                if (operator != null && operator.pathTo("update") != null) {
-                    operator = operator.getSubtree("update");
-                }
-
-                if (operator != null || child.getSubtreeIgnoreUpdateAndCreate("isRejected") == null) {
-                    for (SymbolTree symbolTree : child.getChildren()) {
-                        if (symbolTree != null && child != null && symbolTree.name != null && child.name != null) {
-                            createAttributeValuePair(child.name, symbolTree.name, operator);
-                        }
-                    }
-                }
-
                 child = new SymbolTree(child.name);
                 attachPoint.addChild(child);
             }
 
-//            ctx.attr_value_make().forEach(avm -> attachPoint.addChild(avm.accept(this)));
             System.out.println();
         }
         return null;
@@ -501,54 +398,19 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         nestedVariableNames.clear();
         for (SoarParser.Variable_or_sym_constantContext variable_or_sym_constantContext : ctx.variable_or_sym_constant()) {
             for (SoarParser.Value_makeContext value_makeContext : ctx.value_make()) {
+                AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.addSingleValue(value_makeContext.value().getText());
                 SymbolTree rightHandTree = value_makeContext.accept(this);
-
-                if (variable_or_sym_constantContext.getText().equals("operator")) {
-                    if (!currentOperators.containsKey(rightHandTree.name)) {
-                        SymbolTree createBranch = new SymbolTree("create");
-
-                        SymbolTree idBranch = new SymbolTree("id");
-                        idBranch.addChild(new SymbolTree("" + OPERATOR_ID));
-                        OPERATOR_ID++;
-                        createBranch.addChild(idBranch);
-
-                        rightHandTree.addChild(createBranch);
-                        currentOperators.put(rightHandTree.name, rightHandTree);
-                        if (isProductionOSupported) {
-                            for (SymbolTree operator : currentOperators.values()) {
-                                SymbolTree updateTree = operator.getSubtreeNoError("update");
-                                if (updateTree != null) {
-                                    SymbolTree nestedTemp = new SymbolTree("nestedRemoveOperator");
-                                    nestedTemp.addChild(new SymbolTree("" + (OPERATOR_ID - 1)));
-                                    updateTree.addChild(nestedTemp);
-                                }
-                            }
-
-                        }
-                    } else {
-                        SymbolTree operatorTree  = currentOperators.get(rightHandTree.name);
-                        if (operatorTree.pathTo("update") == null) {
-                            for (SymbolTree attribute : rightHandTree.getChildren()) {
-                                operatorTree.addChild(attribute);
-                            }
-                        } else {
-                            SymbolTree updateTree = operatorTree.getSubtree("update");
-                            for (SymbolTree attribute : rightHandTree.getChildren()) {
-                                updateTree.addChild(attribute);
-                            }
-                        }
-                    }
-                    rightHandTree = null;
-                } else {
-                    if (rightHandTree != null) {
-                        subtree.addChild(rightHandTree);
-                    }
+                if (rightHandTree != null) {
+                    subtree.addChild(rightHandTree);
+                }
+                if (!variable_or_sym_constantContext.getText().equals("operator") && rightHandTree.getSubtreeNoError("isRejected") != null) {
+                    newestValue.setName("$" + newestValue.getName());
+                } else if (variable_or_sym_constantContext.getText().equals("operator")) {
+                    operatorCount++;
                 }
 
                 if (!nestedVariableNames.isEmpty())
                 {
-                    if (rightHandTree == null)
-                    {
                         for (String nestedVariableName : nestedVariableNames)
                         {
                             if (!currentVariableDictionary.containsKey(nestedVariableName))
@@ -557,12 +419,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                             }
 
                         }
-                    }
-                    else
-                    {
-                        value_makeContext.accept(this).getChildren()
-                                .forEach(subtree::addChild);
-                    }
                 }
 
 

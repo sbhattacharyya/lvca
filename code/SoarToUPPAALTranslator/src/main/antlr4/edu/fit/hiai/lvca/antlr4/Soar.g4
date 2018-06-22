@@ -39,7 +39,7 @@ func_name : sym_constant | '+' | '-' | '*' | '/' ;
 value : constant | func_call | variable;
 attr_value_make : '^' variable_or_sym_constant ( '.' variable_or_sym_constant )* value_make+;
 variable_or_sym_constant : variable | sym_constant ;
-value_make: value ((value_pref_binary_value) | (value_pref_clause)*);
+value_make: value ((value_pref_binary_value)? | (value_pref_clause)*);
 value_pref_binary_value: unary_or_binary_pref value COMMA?;
 value_pref_clause: (unary_or_binary_pref COMMA?) | (unary_pref COMMA?);
 

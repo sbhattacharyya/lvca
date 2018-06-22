@@ -11,7 +11,6 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
@@ -21,9 +20,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private final Set<String> _globals;
     private HashMap<String, Integer> globalToIndex;
     private final Set<String> _booleanGlobals;
-    private final ArrayList<SymbolTree> _operators;
-    private SymbolTree _currentOperators;
-    private int OPERATOR_INDEX = 0;
+    private AugmentedSymbolTree _attributesAndValues;
+    private AugmentedEdge _currentProductionOperators;
     private final int NUM_OPERATORS;
     private final Map<String, Map<String, String>> _variableDictionary;
     private Integer _locationCounter = 0;
@@ -32,8 +30,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private final Set<String> _templateNames = new HashSet<>();
     private boolean _unaryOrBinaryFlag = false;
     private boolean _learnInverseAssignments = false;
-    private ArrayList<ArrayList<String>> _operatorsAttributesAndValues;
-    private ArrayList<ArrayList<String>> _stateAttributesAndValues;
     private int _templateIndex = 1;
     private HashSet<String> _productionVariables;
     private LinkedList<Integer> _takenValues = new LinkedList<>();
@@ -41,16 +37,14 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private HashSet<String> _retractOperatorIndexes;
     private Map<Integer, String> _operatorIDToInverseActions = new HashMap<>();
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, ArrayList<SymbolTree> operators, int numOperators, ArrayList<ArrayList<String>> operatorsAttributesAndValues, ArrayList<ArrayList<String>> stateAttributesAndValues, HashMap<String, ProductionVariables> actualVariablesPerProduction) {
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, HashMap<String, ProductionVariables> actualVariablesPerProduction, AugmentedSymbolTree attributesAndValues, LinkedList<Integer> takenValues) {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
-        _operators = operators;
         _actualVariablesPerProduction = actualVariablesPerProduction;
         NUM_OPERATORS = numOperators;
-        _operatorsAttributesAndValues = operatorsAttributesAndValues;
-        _stateAttributesAndValues = stateAttributesAndValues;
-        collectNumericValues();
+        _attributesAndValues = attributesAndValues;
+        _takenValues = takenValues;
         fillGlobalToIndex();
     }
 
@@ -75,22 +69,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
         }
         globalToIndex.put("LATEST_NUM", i);
-    }
-
-    private void loopThroughAVCollection(ArrayList<ArrayList<String>> AVCollection) {
-        for (ArrayList<String> attribute : AVCollection) {
-            for (String value : attribute) {
-                try {
-                    _takenValues.add(Integer.parseInt(value));
-                } catch (NumberFormatException e) {
-                }
-            }
-        }
-    }
-
-    private void collectNumericValues() {
-        loopThroughAVCollection(_operatorsAttributesAndValues);
-        loopThroughAVCollection(_stateAttributesAndValues);
     }
 
     private String getCounter() {
@@ -132,42 +110,42 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "const int nilAnything = -1;\n";
 
         StringBuilder globalVariables = new StringBuilder();
-        for (String variable : _globals) {
-            addConstantOrNonConstant(globalVariables, variable, globalToIndex.get(variable));
-            if (variable.startsWith("state")) {
-                if (variable.startsWith("state_operator")) {
-                    for (SymbolTree productionTree : _operators) {
-                        for (SymbolTree operatorTree : productionTree.getChildren()) {
-                            if (operatorTree.getSubtreeNoError("create") != null) {
-                                LinkedList<SymbolTree> values = operatorTree.DFSForAttributeValues(false);
-                                for (SymbolTree child : values) {
-                                    String test = "state_operator_" + _operatorsAttributesAndValues.get(Integer.parseInt(child.name.substring(1))).get(0);
-                                    if (test.equals(variable)) {
-                                        int valueSize = child.getChildren().size();
-                                        int operatorID = operatorTree.getIDFromTree();
-                                        String newVariableName = variable + "_" + operatorID;
-                                        attributeToTemplate.put(newVariableName, new Attribute_Value_Wrapper(valueSize, globalToIndex.get(variable), operatorID));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    int numValues = -1;
-                    for (ArrayList<String> attribute : _stateAttributesAndValues) {
-                        if (attribute.get(0).equals(variable)) {
-                            numValues = attribute.size() - 1;
-                            break;
-                        }
-                    }
-                    if (numValues == -1) {
-                        attributeToTemplate.put(variable, new Attribute_Value_Wrapper(1, globalToIndex.get(variable), -1));
-                    } else {
-                        attributeToTemplate.put(variable, new Attribute_Value_Wrapper(numValues, globalToIndex.get(variable), -1));
-                    }
-                }
-            }
-        }
+//        for (String variable : _globals) {
+//            addConstantOrNonConstant(globalVariables, variable, globalToIndex.get(variable));
+//            if (variable.startsWith("state")) {
+//                if (variable.startsWith("state_operator")) {
+//                    for (SymbolTree productionTree : _operators) {
+//                        for (SymbolTree operatorTree : productionTree.getChildren()) {
+//                            if (operatorTree.getSubtreeNoError("create") != null) {
+//                                LinkedList<SymbolTree> values = operatorTree.DFSForAttributeValues(false);
+//                                for (SymbolTree child : values) {
+//                                    String test = "state_operator_" + _operatorsAttributesAndValues.get(Integer.parseInt(child.name.substring(1))).get(0);
+//                                    if (test.equals(variable)) {
+//                                        int valueSize = child.getChildren().size();
+//                                        int operatorID = operatorTree.getIDFromTree();
+//                                        String newVariableName = variable + "_" + operatorID;
+//                                        attributeToTemplate.put(newVariableName, new Attribute_Value_Wrapper(valueSize, globalToIndex.get(variable), operatorID));
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    }
+//                } else {
+//                    int numValues = -1;
+//                    for (ArrayList<String> attribute : _stateAttributesAndValues) {
+//                        if (attribute.get(0).equals(variable)) {
+//                            numValues = attribute.size() - 1;
+//                            break;
+//                        }
+//                    }
+//                    if (numValues == -1) {
+//                        attributeToTemplate.put(variable, new Attribute_Value_Wrapper(1, globalToIndex.get(variable), -1));
+//                    } else {
+//                        attributeToTemplate.put(variable, new Attribute_Value_Wrapper(numValues, globalToIndex.get(variable), -1));
+//                    }
+//                }
+//            }
+//        }
         vars += globalVariables.toString();
 
         vars += "broadcast chan Run_Rule;\n" +
@@ -500,8 +478,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         Edge startRunEdge = makeEdge(currentTemplate, startLocation, runGuardLocation, null, null, "Run_Rule?", new Integer[]{40, -32}, null, null, "addToStackCondition(" + _templateIndex + ")", new Integer[]{40, 0});
 
-        _currentOperators = _operators.get(OPERATOR_INDEX);
-        OPERATOR_INDEX++;
+        _currentProductionOperators = _attributesAndValues.findEdge(ctx.sym_constant().getText());
 
         Node conditionSide = ctx.condition_side().accept(this);
         String guard = getText(conditionSide, "guards");
@@ -734,7 +711,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 StringBuilder inverseValue = new StringBuilder("tempValue");
                 StringBuilder operator = new StringBuilder("addOp = ");
 
-                SymbolTree operatorTree = _currentOperators.getSubtreeNoError(idTest);
+                SymbolTree operatorTree = null;/*_currentOperators.getSubtreeNoError(idTest);*/
                 if (operatorTree != null) {
                     operator.append("finalOp,\n");
                 } else {
@@ -1044,7 +1021,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private String checkAndGetOperatorID(String variableName) {
-        SymbolTree operatorTree = _currentOperators.getSubtreeNoError(variableName);
+        SymbolTree operatorTree = null;/*_currentOperators.getSubtreeNoError(variableName);*/
         String returnText;
         if (operatorTree != null) {
             int operatorID = operatorTree.getIDFromTree();
@@ -1175,7 +1152,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             } else {
                 inverseAssignments.append("addOp = " + operatorID + ",\n");
                 int attributeIndex = Integer.parseInt(attributeOrPreference.name.substring(1));
-                inverseAssignments.append("tempAttribute = state_operator_" + simplifiedString(_operatorsAttributesAndValues.get(attributeIndex).get(0)) + ",\n");
+//                inverseAssignments.append("tempAttribute = state_operator_" + simplifiedString(_operatorsAttributesAndValues.get(attributeIndex).get(0)) + ",\n");
                 inverseAssignments.append("removeOperator = true");
             }
             inverseAssignmentsCollection.add(inverseAssignments.toString());
@@ -1183,19 +1160,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private SymbolTree findOperator(int index) {
-        for (SymbolTree production : _operators) {
-            for (SymbolTree operator : production.getChildren()) {
-                if (operator.getIDFromTree() == index) {
-                    return operator;
-                }
-            }
-        }
+//        for (SymbolTree production : _operators) {
+//            for (SymbolTree operator : production.getChildren()) {
+//                if (operator.getIDFromTree() == index) {
+//                    return operator;
+//                }
+//            }
+//        }
         return null;
     }
 
     private void getInverseOperator(Node rightSideElement, LinkedList<String> inverseAssignmentsCollection) {
         if (rightSideElement.getProperty("var") != null) {
-            SymbolTree operator = _currentOperators.getSubtreeNoError(getText(rightSideElement, "var"));
+            SymbolTree operator = null;/*_currentOperators.getSubtreeNoError(getText(rightSideElement, "var"));*/
             if (operator != null && operator.getSubtreeNoError("create") != null) {
                 String operatorID = getIDFromProperty(operator.name);
                 String thisOperatorIndex = "" + (Integer.parseInt(operatorID) - 1);
@@ -1411,7 +1388,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private String getIDFromProperty(String variableName) {
-        SymbolTree otherOperator = _currentOperators.getSubtree(variableName);
+        SymbolTree otherOperator = null;/*_currentOperators.getSubtree(variableName);*/
         String otherOperatorID = otherOperator.getSubtree("create").getSubtree("id").getChildren().get(0).name;
         return otherOperatorID;
     }
