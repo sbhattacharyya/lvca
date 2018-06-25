@@ -1,6 +1,7 @@
 package edu.fit.hiai.lvca.translator.soar;
 
 import java.util.LinkedList;
+import java.util.Map;
 
 public class AugmentedSymbolTree {
     private String name;
@@ -58,7 +59,7 @@ public class AugmentedSymbolTree {
         return AE;
     }
 
-    public void collectAllBranchPathsUtility(LinkedList<String> allBranchPaths, String currentPath) {
+    public void collectAllBranchPaths(LinkedList<String> allBranchPaths, String currentPath) {
         for (AugmentedEdge AE : edgeNameToEdge) {
             AE.collectAllPaths(allBranchPaths, currentPath);
         }
@@ -67,23 +68,47 @@ public class AugmentedSymbolTree {
         }
     }
 
-    public LinkedList<String> collectAllBranchPaths() {
-        LinkedList<String> allBranchPaths = new LinkedList<>();
-        collectAllBranchPathsUtility(allBranchPaths, "state");
-        return allBranchPaths;
+    public void makeIDs(Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables) {
+        for (AugmentedEdge AE : edgeNameToEdge) {
+            AE.makeIDsEdge(variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables);
+        }
     }
 
-    public void cleanAndJoin(AugmentedSymbolTree newAttributeTree, String productionName, LinkedList<Integer> takenValues) {
+    private AugmentedEdge findEdgeTop(String edgeName) {
         for (AugmentedEdge AE : edgeNameToEdge) {
-            AugmentedEdge newAttributeEdge = newAttributeTree.findEdge(AE.getName());
-            if (newAttributeEdge == null && !AE.getName().equals("operator")) {
-                newAttributeTree.addEdge(AE);
-            } else if (AE.getName().equals("operator")) {
-                AugmentedEdge newOperatorEdge = new AugmentedEdge(productionName, AE.getValues());
-                newAttributeTree.addEdge(newOperatorEdge);
-            } else {
-                AE.cleanAndJoinEdge(newAttributeEdge, productionName, takenValues);
+            if (AE.getName().equals(edgeName)) {
+                return AE;
             }
         }
+        return null;
+    }
+
+    public boolean matches(AugmentedSymbolTree otherTree, Map<String, SymbolTree> productionVariableComparison) {
+        //For each edge
+        //If otherTree doesn't have edge
+        //return false
+        //Else, check that edge
+        for (AugmentedEdge AE : edgeNameToEdge) {
+            AugmentedEdge otherEdge = otherTree.findEdgeTop(AE.getName());
+            if (otherEdge == null) {
+                return false;
+            } else {
+                if (!AE.edgeMatches(otherEdge, productionVariableComparison)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public boolean makeCount(ASTCountWithValues currentTree, boolean isUpdated) {
+        for (AugmentedEdge AE : edgeNameToEdge) {
+            if (!currentTree.containsEdge(AE.getName()) && !isUpdated) {
+                isUpdated = true;
+            }
+            ASTCountWithValues currentEdge = currentTree.addEdge(AE.getName());
+            AE.makeCountEdge(currentEdge, isUpdated);
+        }
+        return isUpdated;
     }
 }

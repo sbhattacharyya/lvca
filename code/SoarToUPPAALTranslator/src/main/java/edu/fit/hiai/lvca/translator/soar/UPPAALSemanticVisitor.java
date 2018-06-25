@@ -20,7 +20,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private final Set<String> _globals;
     private HashMap<String, Integer> globalToIndex;
     private final Set<String> _booleanGlobals;
-    private AugmentedSymbolTree _attributesAndValues;
     private AugmentedEdge _currentProductionOperators;
     private final int NUM_OPERATORS;
     private final Map<String, Map<String, String>> _variableDictionary;
@@ -37,13 +36,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private HashSet<String> _retractOperatorIndexes;
     private Map<Integer, String> _operatorIDToInverseActions = new HashMap<>();
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, HashMap<String, ProductionVariables> actualVariablesPerProduction, AugmentedSymbolTree attributesAndValues, LinkedList<Integer> takenValues) {
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, HashMap<String, ProductionVariables> actualVariablesPerProduction, LinkedList<Integer> takenValues) {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
         _actualVariablesPerProduction = actualVariablesPerProduction;
         NUM_OPERATORS = numOperators;
-        _attributesAndValues = attributesAndValues;
         _takenValues = takenValues;
         fillGlobalToIndex();
     }
@@ -478,7 +476,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         Edge startRunEdge = makeEdge(currentTemplate, startLocation, runGuardLocation, null, null, "Run_Rule?", new Integer[]{40, -32}, null, null, "addToStackCondition(" + _templateIndex + ")", new Integer[]{40, 0});
 
-        _currentProductionOperators = _attributesAndValues.findEdge(ctx.sym_constant().getText());
+//        _currentProductionOperators = _attributesAndValues.findEdge(ctx.sym_constant().getText());
 
         Node conditionSide = ctx.condition_side().accept(this);
         String guard = getText(conditionSide, "guards");

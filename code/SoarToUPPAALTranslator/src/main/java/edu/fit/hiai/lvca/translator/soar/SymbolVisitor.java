@@ -27,13 +27,22 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private Map<String, String> currentVariableDictionary;
     private Set<String> nestedVariableNames = new HashSet<>();
     private Map<String, Map<String, String>> globalVariableDictionary = new HashMap<>();
-    private AugmentedSymbolTree attributesAndValues = new AugmentedSymbolTree("state");
+    private Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction = new HashMap<>();
+    private Map<String, AugmentedSymbolTree> productionVariablesToTrees;
+    private Map<String, Map<String, AugmentedSymbolTree>> checkAttributesAndValuesPerProduction = new HashMap<>();
+    private Map<String, AugmentedSymbolTree> checkProductionVariablesToTrees;
+    private Map<String, Map<String, AugmentedSymbolTree>> updateAttributesAndValuesPerProduction = new HashMap<>();
+    private Map<String, AugmentedSymbolTree> updateProductionVariablesToTrees;
     private AugmentedSymbolTree productionSource;
     private AugmentedEdge currentBranchInAttributesAndValues;
+    private Map<String, LinkedList<String>> variableHierarchy = new HashMap<>();
+    private LinkedList<String> currentPlaceInVariableHierarchy;
+    private int addLocation;
     private boolean unaryOrBinaryFlag = false;
     private HashMap<String, ProductionVariables> actualVariablesInProduction = new HashMap<>();
     private ProductionVariables currentVariablesPerProduction;
     private boolean isProductionOSupported;
+    private String stateVariable;
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -43,17 +52,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         // This call also updates stringSymbols, workingMemoryTree, and booleanSymbols
         ctx.accept(this); // Call for side effects
-
-        stringSymbols.addAll(workingMemoryTree.getAllPaths());
-
-        booleanSymbols = booleanSymbols //todo #what
-                .stream()
-                .map(attr -> workingMemoryTree.pathTo(attr))
-                .collect(Collectors.toSet());
-
-        stringSymbols.removeAll(booleanSymbols);
-        stringSymbols.remove("true");
-        stringSymbols.remove("false");
     }
 
     Set<String> getStringSymbols()
@@ -66,6 +64,22 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return workingMemoryTree;
     }
 
+    public Map<String, Map<String, AugmentedSymbolTree>> getAttributesAndValuesPerProduction() {
+        return attributesAndValuesPerProduction;
+    }
+
+    public Map<String, Map<String, AugmentedSymbolTree>> getCheckAttributesAndValuesPerProduction() {
+        return checkAttributesAndValuesPerProduction;
+    }
+
+    public Map<String, Map<String, AugmentedSymbolTree>> getUpdateAttributesAndValuesPerProduction() {
+        return updateAttributesAndValuesPerProduction;
+    }
+
+    public Map<String, LinkedList<String>> getVariableHierarchy() {
+        return variableHierarchy;
+    }
+
     Set<String> getBooleanSymbols()
     {
         return booleanSymbols;
@@ -76,10 +90,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return globalVariableDictionary;
     }
 
-
     HashMap<String, ProductionVariables> getActualVariablesInProduction() { return actualVariablesInProduction; }
-
-    AugmentedSymbolTree getAttributesAndValues() { return attributesAndValues; }
 
     int getOperatorCount() { return operatorCount; }
 
@@ -93,7 +104,19 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitSoar_production(SoarParser.Soar_productionContext ctx)
     {
-        productionSource = attributesAndValues.addEdgeWithoutValues(ctx.sym_constant().getText()).addSingleValue("state");
+        productionVariablesToTrees = new HashMap<>();
+        attributesAndValuesPerProduction.put(ctx.sym_constant().getText(), productionVariablesToTrees);
+
+        checkProductionVariablesToTrees = new HashMap<>();
+        checkAttributesAndValuesPerProduction.put(ctx.sym_constant().getText(), checkProductionVariablesToTrees);
+
+        updateProductionVariablesToTrees = new HashMap<>();
+        updateAttributesAndValuesPerProduction.put(ctx.sym_constant().getText(), updateProductionVariablesToTrees);
+
+        addLocation = 0;
+        currentPlaceInVariableHierarchy = new LinkedList<>();
+        variableHierarchy.put(ctx.sym_constant().getText(), currentPlaceInVariableHierarchy);
+
         currentVariablesPerProduction = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         isProductionOSupported = false;
@@ -111,9 +134,23 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         currentVariablesPerProduction.clean();
         actualVariablesInProduction.put(ctx.sym_constant().getText(), currentVariablesPerProduction);
 
+        for (int i = 0 ; i < currentPlaceInVariableHierarchy.size(); i++) {
+            String variable = currentPlaceInVariableHierarchy.get(i);
+            if (currentVariablesPerProduction.variablesContains(variable) || (currentVariableDictionary.get(variable) != null && currentVariableDictionary.get(variable).contains("operator"))) {
+                currentPlaceInVariableHierarchy.remove(i);
+                i--;
+            }
+        }
 
         globalVariableDictionary.put(ctx.sym_constant().getText(), variablePaths);
         return null;
+    }
+
+    private void setMappingAndSource(String variable, Map<String, AugmentedSymbolTree> map, String treePath) {
+        if (map.get(variable) == null) {
+            map.put(variable, new AugmentedSymbolTree(treePath));
+        }
+        productionSource = map.get(variable);
     }
 
     /**
@@ -128,14 +165,20 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         currentVariableDictionary.put(ctx.id_test().getText(), workingMemoryTree.name);
 
+        setMappingAndSource(ctx.id_test().getText(), checkProductionVariablesToTrees, "state");
+        stateVariable = ctx.id_test().getText();
+
+        currentPlaceInVariableHierarchy.add(addLocation++, ctx.id_test().getText());
+
         // Call for Side Effects
         for (SoarParser.Attr_value_testsContext attr_value_testsContext : ctx.attr_value_tests()) {
-
             SymbolTree child = attr_value_testsContext.accept(this);
             //gets tree without children
             child = child.getChildren().get(0);
             workingMemoryTree.addChild(child);
         }
+
+        productionSource = null;
 
         return null;
     }
@@ -157,6 +200,16 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             currentVariablesPerProduction.addToRejected(ctx.id_test().getText());
         }
 
+        if (currentVariableDictionary.get(ctx.id_test().getText()).equals("state")) {
+            addLocation = currentPlaceInVariableHierarchy.size();
+        } else {
+            addLocation = currentPlaceInVariableHierarchy.indexOf(ctx.id_test().getText()) + 1;
+        }
+
+        if (!currentVariableDictionary.get(ctx.id_test().getText()).contains("operator")) {
+            setMappingAndSource(ctx.id_test().getText(), checkProductionVariablesToTrees, currentVariableDictionary.get(ctx.id_test().getText()));
+        }
+
         for(SoarParser.Attr_value_testsContext avt : ctx.attr_value_tests())
         {
             SymbolTree child = avt.accept(this);
@@ -167,6 +220,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             }
             attachPoint.addChild(child);
         }
+
+        productionSource = null;
 
         return null;
     }
@@ -182,10 +237,25 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitAttr_value_tests(SoarParser.Attr_value_testsContext ctx)
     {
+        boolean conditionIsNegated = ctx.getText().charAt(0) == '-';
         //The attribute or list of attributes following the caret. This SymbolTree therefore has no branching
         SymbolTree subtree = getTreeFromList(ctx.attr_test());
         SymbolTree subtreeWithChildren = new SymbolTree("withChildren");
         subtreeWithChildren.addChild(getTreeFromList(ctx.attr_test()));
+
+        for (SoarParser.Attr_testContext attr_testContext : ctx.attr_test()) {
+            if (productionSource != null) {
+                if (attr_testContext.getText().equals("operator")) {
+                    currentBranchInAttributesAndValues = null;
+                    break;
+                } else {
+                    currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(attr_testContext.getText());
+                }
+            }
+        }
+        if (conditionIsNegated && productionSource != null && currentBranchInAttributesAndValues != null) {
+            currentBranchInAttributesAndValues.addSingleValue("$EMPTY");
+        }
 
         // Global is changed as a side effect of next line
         nestedVariableNames.clear();
@@ -206,7 +276,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             }
         }
 
-
         // this is for translation to Uppaal, which is probably irrelevant at this particular step
         if (ctx.value_test().size() > 0 &&
                 (  ctx.value_test(0).getText().equals("true")
@@ -222,6 +291,23 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
         return returnTree;
     }
+
+    @Override public SymbolTree visitSingle_test(SoarParser.Single_testContext ctx) {
+        String value;
+        if (ctx.variable() != null) {
+            value = ctx.variable().getText();
+            if (!currentPlaceInVariableHierarchy.contains(value)) {
+                currentPlaceInVariableHierarchy.add(addLocation++, value);
+            }
+        } else {
+            value = ctx.constant().getText();
+        }
+        if (productionSource != null && currentBranchInAttributesAndValues != null) {
+            AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.addSingleValue(value);
+        }
+        return visitChildren(ctx);
+    }
+
 
     /**
      * Supports visitAttr_value_tests() method, takes the SymbolTree and returns the first leaf node it finds.
@@ -333,16 +419,15 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 System.exit(1);
             }
 
-            AugmentedSymbolTree source;
-            if (attachPoint.name.equals("state")) {
-                source = productionSource;
+            if (attachPoint.name.equals("state") || (productionVariablesToTrees.get(stateVariable) != null && productionVariablesToTrees.get(stateVariable).findTree(ctx.variable().getText()) != null)) {
+                setMappingAndSource(ctx.variable().getText(), productionVariablesToTrees, currentVariableDictionary.get(ctx.variable().getText()));
             } else {
-                source = productionSource.findTree(ctx.variable().getText());
+                setMappingAndSource(ctx.variable().getText(), updateProductionVariablesToTrees, currentVariableDictionary.get(ctx.variable().getText()));
             }
 
             for (SoarParser.Attr_value_makeContext attr_value_makeContext : ctx.attr_value_make()) {
                 for (SoarParser.Variable_or_sym_constantContext variable_or_sym_constantContext : attr_value_makeContext.variable_or_sym_constant()) {
-                    currentBranchInAttributesAndValues = source.addEdgeWithoutValues(variable_or_sym_constantContext.getText());
+                    currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(variable_or_sym_constantContext.getText());
                 }
                 SymbolTree child = attr_value_makeContext.accept(this);
                 child = new SymbolTree(child.name);

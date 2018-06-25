@@ -24,6 +24,8 @@ public class ProductionVariables {
         return variables.contains(variable);
     }
 
+    public boolean rejectedContains(String variable) { return rejectedVariables.contains(variable); }
+
     public void clean() {
         for (String rejectedVariable : rejectedVariables) {
             if (variablesContains(rejectedVariable)) {
