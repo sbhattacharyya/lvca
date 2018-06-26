@@ -39,8 +39,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private LinkedList<String> currentPlaceInVariableHierarchy;
     private int addLocation;
     private boolean unaryOrBinaryFlag = false;
-    private HashMap<String, ProductionVariables> actualVariablesInProduction = new HashMap<>();
+    private Map<String, ProductionVariables> actualVariablesInProduction = new HashMap<>();
     private ProductionVariables currentVariablesPerProduction;
+    private Map<String, ProductionVariables> variablesCreatedOrUpdated = new HashMap<>();
+    private ProductionVariables currentVariablesCreatedOrUpdated;
     private boolean isProductionOSupported;
     private String stateVariable;
 
@@ -90,7 +92,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return globalVariableDictionary;
     }
 
-    HashMap<String, ProductionVariables> getActualVariablesInProduction() { return actualVariablesInProduction; }
+    Map<String, ProductionVariables> getActualVariablesInProduction() { return actualVariablesInProduction; }
+
+    public Map<String, ProductionVariables> getVariablesCreatedOrUpdated() { return variablesCreatedOrUpdated; }
 
     int getOperatorCount() { return operatorCount; }
 
@@ -118,6 +122,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         variableHierarchy.put(ctx.sym_constant().getText(), currentPlaceInVariableHierarchy);
 
         currentVariablesPerProduction = new ProductionVariables(ctx.sym_constant().getText());
+        currentVariablesCreatedOrUpdated = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         isProductionOSupported = false;
         ctx.condition_side().accept(this);
@@ -133,6 +138,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
         currentVariablesPerProduction.clean();
         actualVariablesInProduction.put(ctx.sym_constant().getText(), currentVariablesPerProduction);
+
+        currentVariablesCreatedOrUpdated.addToRejected(currentVariablesPerProduction.getVariables());
+        currentVariablesCreatedOrUpdated.clean();
+        variablesCreatedOrUpdated.put(ctx.sym_constant().getText(), currentVariablesCreatedOrUpdated);
 
         for (int i = 0 ; i < currentPlaceInVariableHierarchy.size(); i++) {
             String variable = currentPlaceInVariableHierarchy.get(i);
@@ -164,6 +173,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     public SymbolTree visitState_imp_cond(SoarParser.State_imp_condContext ctx)
     {
         currentVariableDictionary.put(ctx.id_test().getText(), workingMemoryTree.name);
+
+        //State is always updated, at least right now
+        currentVariablesCreatedOrUpdated.addToRejected(ctx.id_test().getText());
 
         setMappingAndSource(ctx.id_test().getText(), checkProductionVariablesToTrees, "state");
         stateVariable = ctx.id_test().getText();
@@ -299,6 +311,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             if (!currentPlaceInVariableHierarchy.contains(value)) {
                 currentPlaceInVariableHierarchy.add(addLocation++, value);
             }
+            currentVariablesCreatedOrUpdated.addToRejected(value);
         } else {
             value = ctx.constant().getText();
         }
@@ -506,7 +519,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                         }
                 }
 
-
+                if (value_makeContext.value().variable() != null && !currentVariablesCreatedOrUpdated.rejectedContains(value_makeContext.value().variable().getText())) {
+                    currentVariablesCreatedOrUpdated.addToVaribles(value_makeContext.value().variable().getText());
+                }
             }
         }
 

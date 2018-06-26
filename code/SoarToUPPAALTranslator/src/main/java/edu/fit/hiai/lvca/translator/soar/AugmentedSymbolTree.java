@@ -1,5 +1,6 @@
 package edu.fit.hiai.lvca.translator.soar;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 
@@ -59,18 +60,9 @@ public class AugmentedSymbolTree {
         return AE;
     }
 
-    public void collectAllBranchPaths(LinkedList<String> allBranchPaths, String currentPath) {
+    public void makeIDs(HashSet<Integer> takenValues, Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables, LinkedList<String> variableNames) {
         for (AugmentedEdge AE : edgeNameToEdge) {
-            AE.collectAllPaths(allBranchPaths, currentPath);
-        }
-        if (!currentPath.equals("state")) {
-            allBranchPaths.add(currentPath);
-        }
-    }
-
-    public void makeIDs(Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables) {
-        for (AugmentedEdge AE : edgeNameToEdge) {
-            AE.makeIDsEdge(variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables);
+            AE.makeIDsEdge(takenValues, variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables, variableNames);
         }
     }
 

@@ -1,6 +1,7 @@
 package edu.fit.hiai.lvca.translator.soar;
 
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 
@@ -34,16 +35,6 @@ public class AugmentedEdge {
         return AST;
     }
 
-    public void addAugmentedTree(AugmentedSymbolTree AST) {
-        values.add(AST);
-    }
-
-    public void collectAllPaths(LinkedList<String> allBranchPaths, String currentPath) {
-        for (AugmentedSymbolTree AST : values) {
-            AST.collectAllBranchPaths(allBranchPaths, currentPath + "_" + name);
-        }
-    }
-
     public AugmentedSymbolTree findAugmentedTree(String treeName) {
         for (AugmentedSymbolTree AST : values) {
             AugmentedSymbolTree possibleTree = AST.findTree(treeName);
@@ -54,10 +45,13 @@ public class AugmentedEdge {
         return null;
     }
 
-    public void makeIDsEdge(Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables) {
+    public void makeIDsEdge(HashSet<Integer> takenValues, Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables, LinkedList<String> variableNames) {
         for (AugmentedSymbolTree AST : values) {
+            try {
+                takenValues.add(Integer.parseInt(AST.getName()));
+            } catch(NumberFormatException e) {}
             String variablePath = variablesToPath.get(AST.getName());
-            if (variablePath != null && actualVariables.rejectedContains(AST.getName())) {
+            if (variablePath != null && actualVariables.variablesContains(AST.getName())) {
                 Integer variableID = variableIDToIndex.get(variablePath);
                 if (variableID == null) {
                     variableID = 1;
@@ -65,9 +59,11 @@ public class AugmentedEdge {
                 } else {
                     variableID++;
                 }
-                variablesToPathWithID.put(AST.getName(), variablePath + "_" + variableID);
+                String name = variablePath + "_" + variableID;
+                variablesToPathWithID.put(AST.getName(), name);
+                variableNames.add(name);
             }
-            AST.makeIDs(variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables);
+            AST.makeIDs(takenValues, variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables, variableNames);
         }
     }
 

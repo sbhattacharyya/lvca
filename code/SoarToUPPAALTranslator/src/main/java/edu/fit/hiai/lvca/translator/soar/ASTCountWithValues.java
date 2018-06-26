@@ -2,6 +2,7 @@ package edu.fit.hiai.lvca.translator.soar;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
 
 public class ASTCountWithValues {
@@ -41,6 +42,60 @@ public class ASTCountWithValues {
             ASTCountWithValues newEdge = new ASTCountWithValues();
             edges.put(edgeName, newEdge);
             return newEdge;
+        }
+    }
+
+    public boolean isHead() { return numValues == 0 && values.size() > 0;}
+    public String getHeadValue() { return (String)values.toArray()[0]; }
+
+    public void collectEdges(Map<String, String> variablesToPath, Map<String, ASTCountWithValues> condensedAttributesValueCount, ASTCountWithValues currentASTCountWithValues, HashSet<String> attributes) {
+        if (isHead()) {
+            String firstValue = getHeadValue();
+            String simplifiedFirstVariable = variablesToPath.get(firstValue);
+            currentASTCountWithValues = condensedAttributesValueCount.get(simplifiedFirstVariable);
+            if (currentASTCountWithValues == null || !simplifiedFirstVariable.equals("state_-1")) {
+                currentASTCountWithValues = new ASTCountWithValues(simplifiedFirstVariable);
+                condensedAttributesValueCount.put(simplifiedFirstVariable, currentASTCountWithValues);
+            }
+        } else {
+            for (String nextValue : values) {
+                if (!currentASTCountWithValues.containsValue(nextValue)) {
+                    currentASTCountWithValues.addValue(nextValue);
+                }
+            }
+            currentASTCountWithValues.numValues += numValues - values.size();
+        }
+
+        for (String edgeName : edges.keySet()) {
+            String simplifiedEdgeName = SoarTranslator.simplifiedString(edgeName);
+            attributes.add(simplifiedEdgeName);
+            if (!currentASTCountWithValues.containsEdge(simplifiedEdgeName)) {
+                ASTCountWithValues newEdge = new ASTCountWithValues();
+                currentASTCountWithValues.edges.put(simplifiedEdgeName, newEdge);
+                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, newEdge,attributes);
+            } else {
+                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName), attributes);
+            }
+        }
+    }
+
+    public void createAVCollection(LinkedList<UppaalAttributeValueTriad> AVCollection, UppaalAttributeValueTriad currentTriad, Map<String, Integer> attributesToIDs) {
+        if (isHead()) {
+            String variableNameWithID = getHeadValue();
+            int lastUnderscoreIndex = variableNameWithID.lastIndexOf('_');
+            int operatorIndex = Integer.parseInt(variableNameWithID.substring(lastUnderscoreIndex + 1));
+            currentTriad = new UppaalAttributeValueTriad(variableNameWithID, operatorIndex);
+        } else {
+            String AVName = "AV_" + currentTriad.getName();
+            AVCollection.add(new UppaalAttributeValueTriad(AVName, numValues, currentTriad.getAttributeIndex(), currentTriad.getOperatorIndex()));
+        }
+
+        for (String edgeName : edges.keySet()) {
+            currentTriad.setAttributeIndex(attributesToIDs.get(edgeName));
+            String temp = currentTriad.getName();
+            currentTriad.setName(currentTriad.getName() + "_" + edgeName);
+            edges.get(edgeName).createAVCollection(AVCollection, currentTriad, attributesToIDs);
+            currentTriad.setName(temp);
         }
     }
 }

@@ -12,8 +12,16 @@ public class ProductionVariables {
         rejectedVariables = new HashSet<>();
     }
 
+    public HashSet<String> getVariables() { return variables; }
+
     public void addToVaribles(String variable) {
         variables.add(variable);
+    }
+
+    public void addToRejected(HashSet<String> moreRejectedVariables) {
+        for (String nextRejectedVariable : moreRejectedVariables) {
+            rejectedVariables.add(nextRejectedVariable);
+        }
     }
 
     public void addToRejected(String variable) {

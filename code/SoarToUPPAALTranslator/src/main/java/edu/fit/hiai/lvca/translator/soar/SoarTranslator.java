@@ -91,7 +91,8 @@ public class SoarTranslator
         }
     }
 
-    private static void giveVariablesIDs(Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction, LinkedList<Integer> takenValues, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, Map<String, String>> variablesPerProductionContext, HashMap<String, ProductionVariables> actualVariablesPerProduction) {
+    private static LinkedList<String> giveVariablesIDs(Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction, HashSet<Integer> takenValues, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, Map<String, String>> variablesPerProductionContext, Map<String, ProductionVariables> actualVariablesPerProduction) {
+        LinkedList<String> variableNames = new LinkedList<>();
         for (String individualProduction : attributesAndValuesPerProduction.keySet()) {
             Map<String, String> newVariablesMap = new HashMap<>();
             variablesToPathWithID.put(individualProduction, newVariablesMap);
@@ -99,9 +100,13 @@ public class SoarTranslator
             Map<String, String> currentVariables = variablesPerProductionContext.get(individualProduction);
             ProductionVariables actualVariables = actualVariablesPerProduction.get(individualProduction);
             for (String individualVariable : currentAttributesAndValues.keySet()) {
-                currentAttributesAndValues.get(individualVariable).makeIDs(newVariablesMap, variableIDToIndex, currentVariables, actualVariables);
+                currentAttributesAndValues.get(individualVariable).makeIDs(takenValues, newVariablesMap, variableIDToIndex, currentVariables, actualVariables, variableNames);
+                if (currentVariables.get(individualVariable).equals("state")) {
+                    newVariablesMap.put(individualVariable, "state_-1");
+                }
             }
         }
+        return variableNames;
     }
 
     private static boolean variablesMatch(Map<String, AugmentedSymbolTree> checkMap, Map<String, AugmentedSymbolTree> attributeMap, LinkedList<String> checkVariableDictionary, String attributeStateVariable, HashMap<String, String> attributeVariablesMatch) {
@@ -191,6 +196,33 @@ public class SoarTranslator
         return attributesAndValuesPerProductionCount;
     }
 
+    public static void condensedAttributesAndCollect(Map<String, ASTCountWithValues> condensedAttributesValueCount, Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction, Map<String, Map<String, String>> variablesPerProductionContext, Map<String, Integer> attributesToIDs) {
+        HashSet<String> attributes = new HashSet<>();
+
+        for (String productionName : attributeValueCountPerProduction.keySet()) {
+            Map<String, ASTCountWithValues> currentProductionToASTCountWithValues = attributeValueCountPerProduction.get(productionName);
+            Map<String, String> variablesToPath = variablesPerProductionContext.get(productionName);
+            for (ASTCountWithValues currentASTCountWithVariables : currentProductionToASTCountWithValues.values()) {
+                currentASTCountWithVariables.collectEdges(variablesToPath, condensedAttributesValueCount, null, attributes);
+            }
+        }
+
+        int attributeIndex = 1;
+        for (String nextAttribute : attributes) {
+            attributesToIDs.put(nextAttribute, attributeIndex++);
+        }
+    }
+
+    public static void collectAttributeTriads(LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, ASTCountWithValues> condensedAttributesValueCount, Map<String, Integer> attributesToIDs) {
+        for (String variableNameWithID : condensedAttributesValueCount.keySet()) {
+            condensedAttributesValueCount.get(variableNameWithID).createAVCollection(AVCollection, null, attributesToIDs);
+        }
+    }
+
+    public static String simplifiedString(String str) {
+        return str.replace("-", "_").replace("*", "_");
+    }
+
     /**
      * Using two visitors, a symbol visitor and a semantic visitor, translate Soar to Uppaal. The Symbol visitor
      * associates soar variables, e.g. <o> <s>, with attributes in the working memory tree.  All attributes, values and
@@ -206,11 +238,12 @@ public class SoarTranslator
         SymbolVisitor symbolVisitor = new SymbolVisitor(soarParseTree.soar());
         Set<String> stringAttributeNames = symbolVisitor.getStringSymbols();
         Set<String> boolAttributeNames = symbolVisitor.getBooleanSymbols();
-        HashMap<String, ProductionVariables> actualVariablesPerProduction = symbolVisitor.getActualVariablesInProduction();
+        Map<String, ProductionVariables> actualVariablesPerProduction = symbolVisitor.getActualVariablesInProduction();
         Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction = symbolVisitor.getAttributesAndValuesPerProduction();
         Map<String, Map<String, AugmentedSymbolTree>> checkAttributesAndValuesPerProduction = symbolVisitor.getCheckAttributesAndValuesPerProduction();
         Map<String, Map<String, AugmentedSymbolTree>> updateAttributesAndValuesPerProduction = symbolVisitor.getUpdateAttributesAndValuesPerProduction();
         Map<String, LinkedList<String>> variableHierarchy = symbolVisitor.getVariableHierarchy();
+        Map<String, ProductionVariables> variablesCreatedOrUpdated = symbolVisitor.getVariablesCreatedOrUpdated();
         int numOperators = symbolVisitor.getOperatorCount();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
@@ -224,15 +257,19 @@ public class SoarTranslator
 
         Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction = applyCheckAndUpdate(attributesAndValuesPerProduction, checkAttributesAndValuesPerProduction, updateAttributesAndValuesPerProduction, variableHierarchy);
 
-        LinkedList<Integer> takenValues = new LinkedList<>();
+        HashSet<Integer> takenValues = new HashSet<>();
         Map<String, Map<String, String>> variablesToPathWithID = new HashMap<>();
         Map<String, Integer> variableIDToIndex = new HashMap<>();
-        giveVariablesIDs(attributesAndValuesPerProduction, takenValues, variablesToPathWithID, variableIDToIndex, variablesPerProductionContext, actualVariablesPerProduction);
-//
-//        LinkedList<String> attributeValueConstants = new LinkedList<>();
-//        attributesAndValues.collectAllBranchPaths(attributeValueConstants, "state");
+        LinkedList<String> uppaalOperatorCollection = giveVariablesIDs(attributesAndValuesPerProduction, takenValues, variablesToPathWithID, variableIDToIndex, variablesPerProductionContext, variablesCreatedOrUpdated);
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues));
+        Map<String, Integer> attributesToIDs = new HashMap<>();
+        Map<String, ASTCountWithValues> condensedAttributesValueCount = new HashMap<>();
+        condensedAttributesAndCollect(condensedAttributesValueCount, attributeValueCountPerProduction, variablesToPathWithID, attributesToIDs);
+
+        LinkedList<UppaalAttributeValueTriad> AVCollection = new LinkedList<>();
+        collectAttributeTriads(AVCollection, condensedAttributesValueCount, attributesToIDs);
+
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, attributesToIDs));
     }
 
     /**
