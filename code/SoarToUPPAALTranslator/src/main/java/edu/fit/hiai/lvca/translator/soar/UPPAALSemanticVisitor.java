@@ -20,7 +20,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private final Set<String> _globals;
     private HashMap<String, Integer> globalToIndex;
     private final Set<String> _booleanGlobals;
-    private AugmentedEdge _currentProductionOperators;
     private final int NUM_OPERATORS;
     private final Map<String, Map<String, String>> _variableDictionary;
     private Integer _locationCounter = 0;
@@ -35,7 +34,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private Map<String, ProductionVariables> _actualVariablesPerProduction;
     private HashSet<String> _retractOperatorIndexes;
     private Map<Integer, String> _operatorIDToInverseActions = new HashMap<>();
-    
+    private LinkedList<String> _uppaalOperatorCollection;
+    private LinkedList<UppaalAttributeValueTriad> _AVCollection;
+    private Map<String, Map<String, String>> _variablesToPathWithID;
+    private Map<String, Integer> _attributesToIDs;
 
     public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Integer> attributesToIDs) {
         _globals = stringAttributeNames;
@@ -45,6 +47,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         NUM_OPERATORS = numOperators;
         _takenValues = takenValues.stream().sorted().collect(Collectors.toList());
         fillGlobalToIndex();
+        _uppaalOperatorCollection = uppaalOperatorCollection;
+        _AVCollection = AVCollection;
+        _variablesToPathWithID = variablesToPathWithID;
+        _attributesToIDs = attributesToIDs;
     }
 
     private int getNextIndex(int i) {
@@ -67,7 +73,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 i = getNextIndex(i);
             }
         }
-        globalToIndex.put("LATEST_NUM", i);
     }
 
     private String getCounter() {
@@ -76,10 +81,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return i;
     }
     
-    private void addConstantOrNonConstant(StringBuilder globalVariables, String variable, Integer variableIndex) {
+    private void addConstantToGlobals(StringBuilder globalVariables, String variable, Integer variableIndex) {
         globalVariables.append("const ");
         globalVariables.append("int ");
-        globalVariables.append(SoarTranslator.simplifiedString(variable));
+        globalVariables.append(variable);
         if (variableIndex != null) {
             globalVariables.append(" = ");
             globalVariables.append(variableIndex);
@@ -88,9 +93,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
 
-    private HashMap<String, Attribute_Value_Wrapper> getDeclarationElement() {
-        HashMap<String, Attribute_Value_Wrapper> attributeToTemplate  = new HashMap<>();
-
+    private void getDeclarationElement() {
         _globals.remove("nil"); // added later so that nil always equals 0
 
         String vars = "";
@@ -105,42 +108,17 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "const int nilAnything = -1;\n";
 
         StringBuilder globalVariables = new StringBuilder();
-//        for (String variable : _globals) {
-//            addConstantOrNonConstant(globalVariables, variable, globalToIndex.get(variable));
-//            if (variable.startsWith("state")) {
-//                if (variable.startsWith("state_operator")) {
-//                    for (SymbolTree productionTree : _operators) {
-//                        for (SymbolTree operatorTree : productionTree.getChildren()) {
-//                            if (operatorTree.getSubtreeNoError("create") != null) {
-//                                LinkedList<SymbolTree> values = operatorTree.DFSForAttributeValues(false);
-//                                for (SymbolTree child : values) {
-//                                    String test = "state_operator_" + _operatorsAttributesAndValues.get(Integer.parseInt(child.name.substring(1))).get(0);
-//                                    if (test.equals(variable)) {
-//                                        int valueSize = child.getChildren().size();
-//                                        int operatorID = operatorTree.getIDFromTree();
-//                                        String newVariableName = variable + "_" + operatorID;
-//                                        attributeToTemplate.put(newVariableName, new Attribute_Value_Wrapper(valueSize, globalToIndex.get(variable), operatorID));
-//                                    }
-//                                }
-//                            }
-//                        }
-//                    }
-//                } else {
-//                    int numValues = -1;
-//                    for (ArrayList<String> attribute : _stateAttributesAndValues) {
-//                        if (attribute.get(0).equals(variable)) {
-//                            numValues = attribute.size() - 1;
-//                            break;
-//                        }
-//                    }
-//                    if (numValues == -1) {
-//                        attributeToTemplate.put(variable, new Attribute_Value_Wrapper(1, globalToIndex.get(variable), -1));
-//                    } else {
-//                        attributeToTemplate.put(variable, new Attribute_Value_Wrapper(numValues, globalToIndex.get(variable), -1));
-//                    }
-//                }
-//            }
-//        }
+        for (String variable : _globals) {
+            addConstantToGlobals(globalVariables, SoarTranslator.simplifiedString(variable), globalToIndex.get(variable));
+        }
+        int index = 0;
+        for (String variable : _uppaalOperatorCollection) {
+            addConstantToGlobals(globalVariables, variable, index++);
+        }
+        for (String variable : _attributesToIDs.keySet()) {
+            addConstantToGlobals(globalVariables, variable, _attributesToIDs.get(variable));
+        }
+
         vars += globalVariables.toString();
 
         vars += "broadcast chan Run_Rule;\n" +
@@ -298,8 +276,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
 
         ourDocument.setProperty("declaration", vars);
-
-        return attributeToTemplate;
     }
 
     private void getSystemElement(Element attributeValuePairs) {
@@ -324,9 +300,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
         ctx.soar_production().forEach(sp -> sp.accept(this));
 
-        HashMap<String, Attribute_Value_Wrapper> attributeToTemplate = getDeclarationElement();
+        getDeclarationElement();
 
-        Element attributeValuePairs = getScheduler(attributeToTemplate);
+        Element attributeValuePairs = getScheduler();
 
         getOperatorPreferences();
 
@@ -1565,9 +1541,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return ret;
     }
 
-    private Element getScheduler(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
+    private Element getScheduler() {
         getRunScheduler();
-        return getAttributeValueTemplate(attributeToTemplate);
+        return getAttributeValueTemplate();
     }
 
     private Element getRunScheduler() {
@@ -1608,25 +1584,21 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return runScheduler;
     }
 
-    private String[] makeAttributeValueTemplates(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
+    private String[] makeAttributeValueTemplates() {
         StringBuilder instantiationsCollection = new StringBuilder();
         StringBuilder systemProcesses = new StringBuilder();
-        for (Map.Entry<String, Attribute_Value_Wrapper> stringAttribute_value_wrapperEntry : attributeToTemplate.entrySet()) {
-            String avName = stringAttribute_value_wrapperEntry.getKey();
-            Attribute_Value_Wrapper avWrapper = stringAttribute_value_wrapperEntry.getValue();
-
-            String newAVPair = "AV_" + avName;
-            systemProcesses.append(newAVPair + ", ");
-            instantiationsCollection.append(newAVPair);
+        for (UppaalAttributeValueTriad UAT : _AVCollection) {
+            systemProcesses.append(UAT.getName());
+            instantiationsCollection.append(UAT.getName());
             instantiationsCollection.append(" = ");
             instantiationsCollection.append("Attribute_Value(");
-            instantiationsCollection.append(avWrapper.getNumValues() + ", " + avWrapper.getAttributeIndex() + ", " + avWrapper.getOperatorId());
+            instantiationsCollection.append(UAT.getNumValues() + ", " + UAT.getOperatorIndex() + ", " + UAT.getAttributeIndex());
             instantiationsCollection.append(");\n");
         }
         return new String[]{instantiationsCollection.toString(), systemProcesses.toString()};
     }
 
-    private Element getAttributeValueTemplate(HashMap<String, Attribute_Value_Wrapper> attributeToTemplate) {
+    private Element getAttributeValueTemplate() {
         String startId = getCounter();
         String middleAddLocationID = getCounter();
 
@@ -1710,7 +1682,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdgeWithNails(attributeValueTemplate, startLocation, startLocation, null, null, null, null, "doesContain == 0 &&\naddOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-1071, -204}, "doesContain = doValuesContain()", new Integer[]{-1071, -153}, new Integer[]{-739, -144, -807, -144, -807, -195});
         makeEdge(attributeValueTemplate, startLocation, middleAddLocation, null, null, null, null, "addOperator &&\naddOp == OPERATOR_ID &&\ntempAttribute == ATTRIBUTE_INDEX", new Integer[]{-654, -255}, "containsIndex =getIndexOfValue()", new Integer[]{-654, -187});
 
-        String[] instantiationsAndSystem = makeAttributeValueTemplates(attributeToTemplate);
+        String[] instantiationsAndSystem = makeAttributeValueTemplates();
         attributeValueTemplate.setProperty("instantiations", instantiationsAndSystem[0]);
         attributeValueTemplate.setProperty("system", instantiationsAndSystem[1]);
 
