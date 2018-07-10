@@ -84,14 +84,17 @@ public class ASTCountWithValues {
             String variableNameWithID = getHeadValue();
             int lastUnderscoreIndex = variableNameWithID.lastIndexOf('_');
             int operatorIndex = Integer.parseInt(variableNameWithID.substring(lastUnderscoreIndex + 1));
-            currentTriad = new UppaalAttributeValueTriad(variableNameWithID, operatorIndex);
+            if (operatorIndex == -1) {
+                variableNameWithID = variableNameWithID.substring(0, lastUnderscoreIndex) + "_1";
+            }
+            currentTriad = new UppaalAttributeValueTriad(variableNameWithID, variableNameWithID.equals("state_1") ? "_state" : variableNameWithID);
         } else {
             String AVName = "AV_" + currentTriad.getName();
             AVCollection.add(new UppaalAttributeValueTriad(AVName, numValues, currentTriad.getAttributeIndex(), currentTriad.getOperatorIndex()));
         }
 
         for (String edgeName : edges.keySet()) {
-            currentTriad.setAttributeIndex(attributesToIDs.get(edgeName));
+            currentTriad.setAttributeIndex(edgeName);
             String temp = currentTriad.getName();
             currentTriad.setName(currentTriad.getName() + "_" + edgeName);
             edges.get(edgeName).createAVCollection(AVCollection, currentTriad, attributesToIDs);

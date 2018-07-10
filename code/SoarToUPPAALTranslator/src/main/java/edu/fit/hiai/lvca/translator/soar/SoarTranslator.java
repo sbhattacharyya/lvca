@@ -245,6 +245,8 @@ public class SoarTranslator
         Map<String, LinkedList<String>> variableHierarchy = symbolVisitor.getVariableHierarchy();
         Map<String, ProductionVariables> variablesCreatedOrUpdated = symbolVisitor.getVariablesCreatedOrUpdated();
         int numOperators = symbolVisitor.getOperatorCount();
+        int maxQuerySize = symbolVisitor.getMaxQuerySize();
+        Map<String, Boolean> productionToOSupported = symbolVisitor.getProductionToOSupported();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
 
@@ -269,7 +271,7 @@ public class SoarTranslator
         LinkedList<UppaalAttributeValueTriad> AVCollection = new LinkedList<>();
         collectAttributeTriads(AVCollection, condensedAttributesValueCount, attributesToIDs);
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, attributesToIDs));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, attributesToIDs, maxQuerySize, productionToOSupported));
     }
 
     /**

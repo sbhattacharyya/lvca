@@ -3,20 +3,20 @@ package edu.fit.hiai.lvca.translator.soar;
 public class UppaalAttributeValueTriad {
     private String name;
     private int numValues;
-    private int attributeIndex;
-    private int operatorIndex;
+    private String attribute;
+    private String operator;
 
     UppaalAttributeValueTriad() {}
 
-    UppaalAttributeValueTriad(String _name, int _operatorIndex) {
+    UppaalAttributeValueTriad(String _name, String _operator) {
         name = _name;
-        operatorIndex = _operatorIndex;
+        operator = _operator;
     }
 
-    UppaalAttributeValueTriad(String _name, int _numValues, int _attributeIndex, int _operatorIndex) {
-        this(_name, _operatorIndex);
+    UppaalAttributeValueTriad(String _name, int _numValues, String _attribute, String _operator) {
+        this(_name, _operator);
         numValues = _numValues;
-        attributeIndex = _attributeIndex;
+        attribute = _attribute;
     }
 
     public String getName() {
@@ -35,20 +35,16 @@ public class UppaalAttributeValueTriad {
         this.numValues = numValues;
     }
 
-    public int getAttributeIndex() {
-        return attributeIndex;
+    public String getAttributeIndex() {
+        return attribute;
     }
 
-    public void setAttributeIndex(int attributeIndex) {
-        this.attributeIndex = attributeIndex;
+    public void setAttributeIndex(String attribute) {
+        this.attribute = attribute;
     }
 
-    public int getOperatorIndex() {
-        return operatorIndex;
-    }
-
-    public void setOperatorIndex(int operatorIndex) {
-        this.operatorIndex = operatorIndex;
+    public String getOperatorIndex() {
+        return operator;
     }
 
 

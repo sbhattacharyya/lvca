@@ -45,6 +45,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private ProductionVariables currentVariablesCreatedOrUpdated;
     private boolean isProductionOSupported;
     private String stateVariable;
+    private int maxQuerySize = 0;
+    private int currentMaxQuerySize;
+    private Map<String, Boolean> productionToOSupported = new HashMap<>();
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -96,7 +99,11 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     public Map<String, ProductionVariables> getVariablesCreatedOrUpdated() { return variablesCreatedOrUpdated; }
 
+    public int getMaxQuerySize() { return maxQuerySize; }
+
     int getOperatorCount() { return operatorCount; }
+
+    public Map<String, Boolean> getProductionToOSupported() { return productionToOSupported; }
 
     /**
      * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
@@ -125,8 +132,11 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         currentVariablesCreatedOrUpdated = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         isProductionOSupported = false;
+
+        currentMaxQuerySize = 0;
         ctx.condition_side().accept(this);
         ctx.action_side().accept(this);
+        maxQuerySize = Math.max(maxQuerySize, currentMaxQuerySize);
 
         // globalVariableDictionary: production name -> variable id -> variable path
 
@@ -152,6 +162,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
 
         globalVariableDictionary.put(ctx.sym_constant().getText(), variablePaths);
+        productionToOSupported.put(ctx.sym_constant().getText(), isProductionOSupported);
         return null;
     }
 
@@ -256,6 +267,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         subtreeWithChildren.addChild(getTreeFromList(ctx.attr_test()));
 
         for (SoarParser.Attr_testContext attr_testContext : ctx.attr_test()) {
+            currentMaxQuerySize++;
             if (productionSource != null) {
                 if (attr_testContext.getText().equals("operator")) {
                     currentBranchInAttributesAndValues = null;
@@ -496,6 +508,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         nestedVariableNames.clear();
         for (SoarParser.Variable_or_sym_constantContext variable_or_sym_constantContext : ctx.variable_or_sym_constant()) {
             for (SoarParser.Value_makeContext value_makeContext : ctx.value_make()) {
+                currentMaxQuerySize++;
+                if (!isProductionOSupported && value_makeContext.value_pref_clause().size() == 0 && value_makeContext.value_pref_binary_value() == null) {
+                    currentMaxQuerySize++;
+                }
                 AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.addSingleValue(value_makeContext.value().getText());
                 SymbolTree rightHandTree = value_makeContext.accept(this);
                 if (rightHandTree != null) {
