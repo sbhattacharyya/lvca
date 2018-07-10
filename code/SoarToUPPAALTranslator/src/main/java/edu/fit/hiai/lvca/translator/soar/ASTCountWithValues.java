@@ -22,6 +22,7 @@ public class ASTCountWithValues {
     }
 
     public int getNumValues() { return numValues; }
+    public int getNumEdges() { return edges.size(); }
 
     public boolean containsValue (String value) { return values.contains(value); }
     public boolean containsEdge (String edge) { return edges.get(edge) != null; }

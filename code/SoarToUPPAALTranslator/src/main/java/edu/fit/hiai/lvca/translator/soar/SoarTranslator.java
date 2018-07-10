@@ -271,7 +271,12 @@ public class SoarTranslator
         LinkedList<UppaalAttributeValueTriad> AVCollection = new LinkedList<>();
         collectAttributeTriads(AVCollection, condensedAttributesValueCount, attributesToIDs);
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, attributesToIDs, maxQuerySize, productionToOSupported));
+        Map<String, Integer> variableToNumAttributes = new HashMap<>();
+        for (String variable : condensedAttributesValueCount.keySet()) {
+            variableToNumAttributes.put(variable, condensedAttributesValueCount.get(variable).getNumEdges());
+        }
+
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, attributesToIDs, maxQuerySize, productionToOSupported, variableToNumAttributes));
     }
 
     /**
