@@ -512,6 +512,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 if (!isProductionOSupported && value_makeContext.value_pref_clause().size() == 0 && value_makeContext.value_pref_binary_value() == null) {
                     currentMaxQuerySize++;
                 }
+                if (value_makeContext.value().func_call() != null) {
+                    currentMaxQuerySize++;
+                }
                 AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.addSingleValue(value_makeContext.value().getText());
                 SymbolTree rightHandTree = value_makeContext.accept(this);
                 if (rightHandTree != null) {
