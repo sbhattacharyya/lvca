@@ -34,7 +34,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private Map<String, Map<String, AugmentedSymbolTree>> updateAttributesAndValuesPerProduction = new HashMap<>();
     private Map<String, AugmentedSymbolTree> updateProductionVariablesToTrees;
     private AugmentedSymbolTree productionSource;
-    private AugmentedEdge currentBranchInAttributesAndValues;
+    private Set<AugmentedEdge> currentBranchInAttributesAndValues = new HashSet<>();
     private Map<String, LinkedList<String>> variableHierarchy = new HashMap<>();
     private LinkedList<String> currentPlaceInVariableHierarchy;
     private int addLocation;
@@ -48,6 +48,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private int maxQuerySize = 0;
     private int currentMaxQuerySize;
     private Map<String, Boolean> productionToOSupported = new HashMap<>();
+    private Map<String, String[]> arrayNameToDisjunctionTest = new HashMap<>();
+    private Map<String, String> attributeVariableToArrayName = new HashMap<>();
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -132,6 +134,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         currentVariablesCreatedOrUpdated = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         isProductionOSupported = false;
+        currentBranchInAttributesAndValues.clear();
 
         currentMaxQuerySize = 0;
         ctx.condition_side().accept(this);
@@ -206,6 +209,19 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return null;
     }
 
+    @Override
+    public SymbolTree visitPositive_cond(SoarParser.Positive_condContext ctx)
+    {
+        if (ctx.conds_for_one_id() != null) {
+            ctx.conds_for_one_id().accept(this);
+        } else {
+            for (SoarParser.CondContext condContext : ctx.cond()) {
+                condContext.accept(this);
+            }
+        }
+        return null;
+    }
+
     /**
      * Based on the variable that starts the Soar condition, store the attributes in the expression.
      *
@@ -268,17 +284,31 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         for (SoarParser.Attr_testContext attr_testContext : ctx.attr_test()) {
             currentMaxQuerySize++;
+            SymbolTree attribute = attr_testContext.accept(this);
             if (productionSource != null) {
                 if (attr_testContext.getText().equals("operator")) {
-                    currentBranchInAttributesAndValues = null;
+                    currentBranchInAttributesAndValues.clear();
                     break;
                 } else {
-                    currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(attr_testContext.getText());
+                    if (attr_testContext.test().conjunctive_test() != null) {
+                        SymbolTree arrayBranch = attribute.getSubtree("array").getChildren().get(0);
+                        attributeVariableToArrayName.put(attribute.getSubtree("variable").getChildren().get(0).name, arrayBranch.name);
+                        String[] attributeNames = arrayNameToDisjunctionTest.get(arrayBranch.name);
+                        for (String nextAttributeName : attributeNames) {
+                            currentBranchInAttributesAndValues.add(productionSource.addEdgeWithoutValues(nextAttributeName));
+                        }
+                    } else {
+                        if (attr_testContext.getText().charAt(0) == '<' && attr_testContext.getText().charAt(attr_testContext.getText().length() - 1) == '>') {
+                            String arrayName = attributeVariableToArrayName.get(attr_testContext.getText());
+                            
+                        }
+                        currentBranchInAttributesAndValues.add(productionSource.addEdgeWithoutValues(attribute.name));
+                    }
                 }
             }
         }
-        if (conditionIsNegated && productionSource != null && currentBranchInAttributesAndValues != null) {
-            currentBranchInAttributesAndValues.addSingleValue("$EMPTY");
+        if (conditionIsNegated && productionSource != null && currentBranchInAttributesAndValues.size() != 0) {
+            currentBranchInAttributesAndValues.forEach(e -> e.addSingleValue("$EMPTY"));
         }
 
         // Global is changed as a side effect of next line
@@ -316,21 +346,130 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return returnTree;
     }
 
+    @Override
+    public SymbolTree visitConjunctive_test(SoarParser.Conjunctive_testContext ctx)
+    {
+        SymbolTree multipleConditions = new SymbolTree("multiple");
+        for (SoarParser.Simple_testContext simple_testContext : ctx.simple_test()) {
+            SymbolTree simpleTest = simple_testContext.accept(this);
+            SymbolTree disjunctionArray = multipleConditions.getSubtreeNoError("disjunctionArray");
+            if (simpleTest.name.startsWith("array")) {
+                SymbolTree arrays;
+                if (disjunctionArray == null) {
+                    disjunctionArray = new SymbolTree("disjunctionArray");
+                    arrays = new SymbolTree("array");
+                    disjunctionArray.addChild(arrays);
+                    multipleConditions.addChild(disjunctionArray);
+                } else {
+                    arrays = disjunctionArray.getSubtreeNoError("array");
+                }
+                arrays.addChild(simpleTest);
+            } else {
+                if (disjunctionArray != null && simple_testContext.getText().charAt(0) == '<' && simple_testContext.getText().charAt(simpleTest.name.length() - 1) == '>') {
+                    SymbolTree variable = new SymbolTree("variable");
+                    variable.addChild(new SymbolTree(simple_testContext.getText()));
+                    disjunctionArray.addChild(variable);
+                } else {
+                    multipleConditions.addChild(simpleTest);
+                }
+            }
+        }
+        return multipleConditions;
+    }
+
+
+    @Override
+    public SymbolTree visitDisjunction_test(SoarParser.Disjunction_testContext ctx)
+    {
+        String[] allButList = new String[ctx.constant().size()];
+        for (int i = 0; i < ctx.constant().size(); i++) {
+            ctx.constant(i).accept(this);
+            allButList[i] = ctx.constant(i).getText();
+        }
+        int latestIndex = 1;
+        boolean contains = false;
+        for (Map.Entry<String, String[]> stringEntry : arrayNameToDisjunctionTest.entrySet()) {
+            int nextIndex = Integer.parseInt(stringEntry.getKey().substring(stringEntry.getKey().lastIndexOf('_') + 1));
+            if (stringEntry.getValue().equals(allButList)) {
+                latestIndex = nextIndex;
+                contains = true;
+                break;
+            } else {
+                latestIndex = Math.max(latestIndex, nextIndex);
+            }
+        }
+        String arrayName = "array_" + latestIndex;
+        if (!contains) {
+            arrayNameToDisjunctionTest.put(arrayName, allButList);
+        }
+        return new SymbolTree(arrayName);
+    }
+
+
+    @Override
+    public SymbolTree visitRelational_test(SoarParser.Relational_testContext ctx)
+    {
+        SymbolTree singleTest = ctx.single_test().accept(this);
+
+        SymbolTree returnTree;
+        if (ctx.relation() != null) {
+            returnTree = ctx.relation().accept(this);
+            returnTree.addChild(singleTest);
+        } else {
+            returnTree = singleTest;
+        }
+        return returnTree;
+    }
+
+
+    @Override
+    public SymbolTree visitRelation(SoarParser.RelationContext ctx)
+    {
+        String relationText;
+        switch(ctx.getText()) {
+            case "<>": relationText = "isNotEqualTo";
+                       break;
+            case "<": relationText = "isLessThan";
+                      break;
+            case ">": relationText = "isGreaterThan";
+                      break;
+            case "<=": relationText = "isLessThanOrEqualTo";
+                       break;
+            case ">=": relationText = "isGreaterThanOrEqualTo";
+                       break;
+            case "<=>": relationText = "isSameTypeAs";
+                        break;
+            default:
+                relationText = null;
+                break;
+        }
+        SymbolTree returnTree;
+        if (relationText != null) {
+            returnTree = new SymbolTree(relationText);
+        } else {
+            returnTree = null;
+        }
+        return returnTree;
+    }
+
+
     @Override public SymbolTree visitSingle_test(SoarParser.Single_testContext ctx) {
         String value;
         if (ctx.variable() != null) {
+            ctx.variable().accept(this);
             value = ctx.variable().getText();
             if (!currentPlaceInVariableHierarchy.contains(value)) {
                 currentPlaceInVariableHierarchy.add(addLocation++, value);
             }
             currentVariablesCreatedOrUpdated.addToRejected(value);
         } else {
+            ctx.constant().accept(this);
             value = ctx.constant().getText();
         }
         if (productionSource != null && currentBranchInAttributesAndValues != null) {
-            AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.addSingleValue(value);
+            currentBranchInAttributesAndValues.addSingleValue(value);
         }
-        return visitChildren(ctx);
+        return new SymbolTree(value);
     }
 
 
