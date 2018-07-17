@@ -1377,18 +1377,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                      break;
         }
 
-//        if (ctx.func_name().getText().equals("-") && rightContext == null) {
-//            result = "0 - " + SoarTranslator.simplifiedString(leftSide);
-//        } else {
-//            String rightSide = getVariableOrTemp(rightContext, localDictionary);
-//            String funcName = ctx.func_name().getText();
-//
-//            if ("+-/*".contains(ctx.func_name().getText())) {
-//                result = SoarTranslator.simplifiedString(leftSide + " " + funcName + " " + rightSide);
-//            } else {
-//                result = "";
-//            }
-//        }
         Node returnNode = textAsNode("expr", result);
         returnNode.setProperty("firstValue", leftSide);
         returnNode.setProperty("secondValue", rightContext.getText());

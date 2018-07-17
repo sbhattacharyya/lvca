@@ -67,7 +67,7 @@ public class AugmentedEdge {
         }
     }
 
-    private AugmentedSymbolTree findAugmentedTreeTop(String augmentedTreeName) {
+    public AugmentedSymbolTree findAugmentedTreeTop(String augmentedTreeName) {
         for (AugmentedSymbolTree AST : values) {
             if (AST.getName().equals(augmentedTreeName)) {
                 return AST;
@@ -76,7 +76,7 @@ public class AugmentedEdge {
         return null;
     }
 
-    public boolean edgeMatches(AugmentedEdge otherEdge, Map<String, SymbolTree> productionVariableComparison) {
+    public boolean edgeMatches(AugmentedEdge otherEdge, Map<String, SymbolTree> productionVariableComparison, Map<String, String[]> attributeVariableToDisjunctionTest, Map<String, String> currentAttributeValueToSelection) {
         for (AugmentedSymbolTree AST : values) {
             if (AST.getName().charAt(0) == '<') {
                 SymbolTree tempTree = new SymbolTree(AST.getName());
@@ -88,7 +88,7 @@ public class AugmentedEdge {
                 AugmentedSymbolTree otherAST = otherEdge.findAugmentedTreeTop(AST.getName());
                 if (otherAST == null) {
                     return false;
-                } else if (!AST.matches(otherAST, productionVariableComparison)) {
+                } else if (!AST.matches(otherAST, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection)) {
                     return false;
                 }
             }

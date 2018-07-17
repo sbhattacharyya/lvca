@@ -73,7 +73,7 @@ public class SymbolTree
         return null;
     }
 
-    public SymbolTree getSubtreeIgnoreUpdateAndCreate(String treeName) {
+    public SymbolTree DFS(String treeName) {
         if (name.equals(treeName))
         {
             return this;
@@ -82,11 +82,9 @@ public class SymbolTree
         {
             for (SymbolTree child : children)
             {
-                if (child.name.equals("update") || child.name.equals("create")) {
-                    continue;
-                } else if (child.getSubtreeNoError(treeName) != null)
-                {
-                    return child;
+                SymbolTree childTree = child.getSubtreeNoError(treeName);
+                if (childTree != null) {
+                    return childTree;
                 }
             }
         }

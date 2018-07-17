@@ -109,17 +109,17 @@ public class SoarTranslator
         return variableNames;
     }
 
-    private static boolean variablesMatch(Map<String, AugmentedSymbolTree> checkMap, Map<String, AugmentedSymbolTree> attributeMap, LinkedList<String> checkVariableDictionary, String attributeStateVariable, HashMap<String, String> attributeVariablesMatch) {
+    private static boolean variablesMatch(Map<String, AugmentedSymbolTree> checkMap, Map<String, AugmentedSymbolTree> attributeMap, LinkedList<String> checkVariableDictionary, String attributeStateVariable, HashMap<String, String> attributeVariablesMatch, Map<String, String[]> attributeVariableToDisjunctionTest) {
         Map<String, SymbolTree> productionVariableComparison = new HashMap<>();
         productionVariableComparison.put(checkVariableDictionary.get(0), new SymbolTree(attributeStateVariable));
-        if (checkMap.get(checkVariableDictionary.get(0)).matches(attributeMap.get(attributeStateVariable), productionVariableComparison)) {
+        if (checkMap.get(checkVariableDictionary.get(0)).matches(attributeMap.get(attributeStateVariable), productionVariableComparison, attributeVariableToDisjunctionTest, new HashMap<>())) {
             attributeVariablesMatch.put(attributeStateVariable, checkVariableDictionary.get(0));
             for (int i = 1; i < checkVariableDictionary.size(); i++) {
                 String variableName = checkVariableDictionary.get(i);
                 SymbolTree comparisonCollection = productionVariableComparison.get(variableName);
                 int numMatches = 0;
                 for (SymbolTree possibleVariableMatch : comparisonCollection.getChildren()) {
-                    if (checkMap.get(variableName).matches(attributeMap.get(possibleVariableMatch.name), productionVariableComparison)) {
+                    if (checkMap.get(variableName).matches(attributeMap.get(possibleVariableMatch.name), productionVariableComparison, attributeVariableToDisjunctionTest, new HashMap<>())) {
                         attributeVariablesMatch.put(possibleVariableMatch.name, variableName);
                         numMatches++;
                     }
@@ -168,7 +168,7 @@ public class SoarTranslator
         return attributesAndValuesPerProductionCount;
     }
 
-    private static Map<String, Map<String, ASTCountWithValues>> applyCheckAndUpdate(Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction, Map<String, Map<String, AugmentedSymbolTree>> checkAttributesAndValuesPerProduction, Map<String, Map<String, AugmentedSymbolTree>> updateAttributesAndValuesPerProduction, Map<String, LinkedList<String>> variableHierarchy) {
+    private static Map<String, Map<String, ASTCountWithValues>> applyCheckAndUpdate(Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction, Map<String, Map<String, AugmentedSymbolTree>> checkAttributesAndValuesPerProduction, Map<String, Map<String, AugmentedSymbolTree>> updateAttributesAndValuesPerProduction, Map<String, LinkedList<String>> variableHierarchy, Map<String, String[]> attributeVariableToDisjunctionTest) {
         LinkedList<String> productionNames = new LinkedList<>(attributesAndValuesPerProduction.keySet());
         for (int i = 0; i < productionNames.size(); i++) {
             if (isEmpty(updateAttributesAndValuesPerProduction.get(productionNames.get(i)))) {
@@ -187,7 +187,7 @@ public class SoarTranslator
                         continue;
                     }
                     HashMap<String, String> attributeVariablesMatch = new HashMap<>();
-                    if (variablesMatch(checkAttributesAndValuesPerProduction.get(productionName), attributesAndValuesPerProduction.get(productionName2), variableHierarchy.get(productionName), variableHierarchy.get(productionName2).get(0), attributeVariablesMatch)) {
+                    if (variablesMatch(checkAttributesAndValuesPerProduction.get(productionName), attributesAndValuesPerProduction.get(productionName2), variableHierarchy.get(productionName), variableHierarchy.get(productionName2).get(0), attributeVariablesMatch, attributeVariableToDisjunctionTest)) {
                         repeat = applyVariables(attributesAndValuesPerProductionCount.get(productionName2), updateAttributesAndValuesPerProduction.get(productionName), attributeVariablesMatch);
                     }
                 }
@@ -247,6 +247,7 @@ public class SoarTranslator
         int numOperators = symbolVisitor.getOperatorCount();
         int maxQuerySize = symbolVisitor.getMaxQuerySize();
         Map<String, Boolean> productionToOSupported = symbolVisitor.getProductionToOSupported();
+        Map<String, String[]> attributeVariableToDisjunctionTest = symbolVisitor.getAttributeVariableToDisjunctionTest();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
 
@@ -257,7 +258,7 @@ public class SoarTranslator
                 .map(name -> name.replace("-", "_"))
                 .collect(Collectors.toSet());
 
-        Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction = applyCheckAndUpdate(attributesAndValuesPerProduction, checkAttributesAndValuesPerProduction, updateAttributesAndValuesPerProduction, variableHierarchy);
+        Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction = applyCheckAndUpdate(attributesAndValuesPerProduction, checkAttributesAndValuesPerProduction, updateAttributesAndValuesPerProduction, variableHierarchy, attributeVariableToDisjunctionTest);
 
         HashSet<Integer> takenValues = new HashSet<>();
         Map<String, Map<String, String>> variablesToPathWithID = new HashMap<>();

@@ -23,7 +23,7 @@ conjunctive_test : '{' simple_test+ '}' ;
 simple_test : disjunction_test | relational_test ;
 multi_value_test : '[' Int_constant+ ']' ;
 disjunction_test : '<<' constant+ '>>' ;
-relational_test : relation? single_test ;
+relational_test : single_test | (relation single_test) ;
 relation : '<>' | '<' | '>' | '<=' | '>=' | '==' | '<=>' | '=';
 single_test : variable | constant ;
 variable : '<' sym_constant '>' ;

@@ -34,7 +34,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private Map<String, Map<String, AugmentedSymbolTree>> updateAttributesAndValuesPerProduction = new HashMap<>();
     private Map<String, AugmentedSymbolTree> updateProductionVariablesToTrees;
     private AugmentedSymbolTree productionSource;
-    private Set<AugmentedEdge> currentBranchInAttributesAndValues = new HashSet<>();
+    private AugmentedEdge currentBranchInAttributesAndValues;
     private Map<String, LinkedList<String>> variableHierarchy = new HashMap<>();
     private LinkedList<String> currentPlaceInVariableHierarchy;
     private int addLocation;
@@ -50,6 +50,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private Map<String, Boolean> productionToOSupported = new HashMap<>();
     private Map<String, String[]> arrayNameToDisjunctionTest = new HashMap<>();
     private Map<String, String> attributeVariableToArrayName = new HashMap<>();
+    private boolean onAttribute;
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -107,6 +108,15 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     public Map<String, Boolean> getProductionToOSupported() { return productionToOSupported; }
 
+    public Map<String, String[]> getAttributeVariableToDisjunctionTest()
+    {
+        Map<String, String[]> attributeVariableToDisjunctionTest = new HashMap<>();
+        for (Map.Entry<String, String> attributeVariableToArrayName : attributeVariableToArrayName.entrySet()) {
+            attributeVariableToDisjunctionTest.put(attributeVariableToArrayName.getKey(), arrayNameToDisjunctionTest.get(attributeVariableToArrayName.getValue()));
+        }
+        return attributeVariableToDisjunctionTest;
+    }
+
     /**
      * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
      * The global dictionary keeps track of all Soar variable associations
@@ -134,7 +144,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         currentVariablesCreatedOrUpdated = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         isProductionOSupported = false;
-        currentBranchInAttributesAndValues.clear();
 
         currentMaxQuerySize = 0;
         ctx.condition_side().accept(this);
@@ -265,6 +274,13 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return null;
     }
 
+    private String addAttributeVariableToArrayName(SymbolTree attribute) {
+        SymbolTree disjunctionBranch = attribute.DFS("disjunctionArray").getChildren().get(0);
+        SymbolTree variableBranch = attribute.DFS("variable").getChildren().get(0);
+        attributeVariableToArrayName.put(variableBranch.name, disjunctionBranch.name);
+        return variableBranch.name;
+    }
+
     /**
      * Determine the associations for the variable dictionary.
      *
@@ -282,33 +298,30 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         SymbolTree subtreeWithChildren = new SymbolTree("withChildren");
         subtreeWithChildren.addChild(getTreeFromList(ctx.attr_test()));
 
+        onAttribute = true;
         for (SoarParser.Attr_testContext attr_testContext : ctx.attr_test()) {
             currentMaxQuerySize++;
             SymbolTree attribute = attr_testContext.accept(this);
             if (productionSource != null) {
                 if (attr_testContext.getText().equals("operator")) {
-                    currentBranchInAttributesAndValues.clear();
+                    currentBranchInAttributesAndValues = null;
                     break;
                 } else {
                     if (attr_testContext.test().conjunctive_test() != null) {
-                        SymbolTree arrayBranch = attribute.getSubtree("array").getChildren().get(0);
-                        attributeVariableToArrayName.put(attribute.getSubtree("variable").getChildren().get(0).name, arrayBranch.name);
-                        String[] attributeNames = arrayNameToDisjunctionTest.get(arrayBranch.name);
-                        for (String nextAttributeName : attributeNames) {
-                            currentBranchInAttributesAndValues.add(productionSource.addEdgeWithoutValues(nextAttributeName));
-                        }
+                        String variableName = addAttributeVariableToArrayName(attribute);
+                        currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(variableName);
                     } else {
-                        if (attr_testContext.getText().charAt(0) == '<' && attr_testContext.getText().charAt(attr_testContext.getText().length() - 1) == '>') {
-                            String arrayName = attributeVariableToArrayName.get(attr_testContext.getText());
-                            
-                        }
-                        currentBranchInAttributesAndValues.add(productionSource.addEdgeWithoutValues(attribute.name));
+                        currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(attribute.name);
                     }
                 }
+            } else if (attr_testContext.test().conjunctive_test() != null) {
+                addAttributeVariableToArrayName(attribute);
             }
         }
-        if (conditionIsNegated && productionSource != null && currentBranchInAttributesAndValues.size() != 0) {
-            currentBranchInAttributesAndValues.forEach(e -> e.addSingleValue("$EMPTY"));
+        onAttribute = false;
+
+        if (productionSource != null && currentBranchInAttributesAndValues != null && ctx.value_test().size() == 0) {
+            currentBranchInAttributesAndValues.addSingleValue("$EMPTY");
         }
 
         // Global is changed as a side effect of next line
@@ -316,6 +329,25 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         // Called for side effects
         for (SoarParser.Value_testContext value_testContext : ctx.value_test()) {
             SymbolTree child = value_testContext.accept(this);
+            if (child.DFS("relation") != null) {
+                SymbolTree variable = child.DFS("variable").getChildren().get(0);
+                SymbolTree relations = child.DFS("relation");
+                if (productionSource != null) {
+                    currentBranchInAttributesAndValues.findAugmentedTree(variable.name).addToRestrictions(relations);
+                }
+                variable.addChild(relations);
+                child = new SymbolTree("multiple");
+                child.addChild(variable);
+            }
+            if (conditionIsNegated) {
+                SymbolTree variable = child.DFS("variable");
+                if (variable == null) {
+                    variable = child;
+                } else {
+                    variable = variable.getChildren().get(0);
+                }
+                currentBranchInAttributesAndValues.findAugmentedTree(variable.name).addToRestrictions(new SymbolTree("NEGATED"));
+            }
             if (child != null && !subtree.name.equals("operator")) {
                 subtreeWithChildren.getChildren().get(0).addChild(child);
             }
@@ -351,27 +383,31 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         SymbolTree multipleConditions = new SymbolTree("multiple");
         for (SoarParser.Simple_testContext simple_testContext : ctx.simple_test()) {
-            SymbolTree simpleTest = simple_testContext.accept(this);
-            SymbolTree disjunctionArray = multipleConditions.getSubtreeNoError("disjunctionArray");
-            if (simpleTest.name.startsWith("array")) {
-                SymbolTree arrays;
-                if (disjunctionArray == null) {
-                    disjunctionArray = new SymbolTree("disjunctionArray");
-                    arrays = new SymbolTree("array");
-                    disjunctionArray.addChild(arrays);
-                    multipleConditions.addChild(disjunctionArray);
+            if (simple_testContext.relational_test() == null || (simple_testContext.relational_test() != null && simple_testContext.relational_test().relation() == null)) {
+                SymbolTree simpleTest = simple_testContext.accept(this);
+                SymbolTree disjunctionArray = multipleConditions.getSubtreeNoError("disjunctionArray");
+                if (simpleTest.name.startsWith("array")) {
+                    if (disjunctionArray == null) {
+                        disjunctionArray = new SymbolTree("disjunctionArray");
+                        multipleConditions.addChild(disjunctionArray);
+                    }
+                    disjunctionArray.addChild(simpleTest);
                 } else {
-                    arrays = disjunctionArray.getSubtreeNoError("array");
+                    if (simple_testContext.getText().charAt(0) == '<' && simple_testContext.getText().charAt(simple_testContext.getText().length() - 1) == '>') {
+                        SymbolTree variable = new SymbolTree("variable");
+                        variable.addChild(new SymbolTree(simple_testContext.getText()));
+                        multipleConditions.addChild(variable);
+                    }
                 }
-                arrays.addChild(simpleTest);
             } else {
-                if (disjunctionArray != null && simple_testContext.getText().charAt(0) == '<' && simple_testContext.getText().charAt(simpleTest.name.length() - 1) == '>') {
-                    SymbolTree variable = new SymbolTree("variable");
-                    variable.addChild(new SymbolTree(simple_testContext.getText()));
-                    disjunctionArray.addChild(variable);
-                } else {
-                    multipleConditions.addChild(simpleTest);
+                SymbolTree relationBranch = multipleConditions.DFS("relation");
+                if (relationBranch == null) {
+                    relationBranch = new SymbolTree("relation");
+                    multipleConditions.addChild(relationBranch);
                 }
+                SymbolTree relation = simple_testContext.relational_test().relation().accept(this);
+                relation.addChild(new SymbolTree(simple_testContext.relational_test().single_test().getText()));
+                relationBranch.addChild(relation);
             }
         }
         return multipleConditions;
@@ -381,16 +417,16 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitDisjunction_test(SoarParser.Disjunction_testContext ctx)
     {
-        String[] allButList = new String[ctx.constant().size()];
+        String[] notAllBut = new String[ctx.constant().size()];
         for (int i = 0; i < ctx.constant().size(); i++) {
             ctx.constant(i).accept(this);
-            allButList[i] = ctx.constant(i).getText();
+            notAllBut[i] = ctx.constant(i).getText();
         }
         int latestIndex = 1;
         boolean contains = false;
         for (Map.Entry<String, String[]> stringEntry : arrayNameToDisjunctionTest.entrySet()) {
             int nextIndex = Integer.parseInt(stringEntry.getKey().substring(stringEntry.getKey().lastIndexOf('_') + 1));
-            if (stringEntry.getValue().equals(allButList)) {
+            if (stringEntry.getValue().equals(notAllBut)) {
                 latestIndex = nextIndex;
                 contains = true;
                 break;
@@ -400,7 +436,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         }
         String arrayName = "array_" + latestIndex;
         if (!contains) {
-            arrayNameToDisjunctionTest.put(arrayName, allButList);
+            arrayNameToDisjunctionTest.put(arrayName, notAllBut);
         }
         return new SymbolTree(arrayName);
     }
@@ -409,15 +445,16 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitRelational_test(SoarParser.Relational_testContext ctx)
     {
+        SymbolTree returnTree;
         SymbolTree singleTest = ctx.single_test().accept(this);
 
-        SymbolTree returnTree;
         if (ctx.relation() != null) {
             returnTree = ctx.relation().accept(this);
             returnTree.addChild(singleTest);
         } else {
             returnTree = singleTest;
         }
+
         return returnTree;
     }
 
@@ -466,7 +503,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
             ctx.constant().accept(this);
             value = ctx.constant().getText();
         }
-        if (productionSource != null && currentBranchInAttributesAndValues != null) {
+        if (productionSource != null && currentBranchInAttributesAndValues != null && !onAttribute) {
             currentBranchInAttributesAndValues.addSingleValue(value);
         }
         return new SymbolTree(value);
@@ -583,7 +620,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 System.exit(1);
             }
 
-            if (attachPoint.name.equals("state") || (productionVariablesToTrees.get(stateVariable) != null && productionVariablesToTrees.get(stateVariable).findTree(ctx.variable().getText()) != null)) {
+            if (attachPoint.name.equals("state") || (productionVariablesToTrees.get(stateVariable) != null && productionVariablesToTrees.get(stateVariable).resursiveSearch(productionVariablesToTrees, ctx.variable().getText()))) {
                 setMappingAndSource(ctx.variable().getText(), productionVariablesToTrees, currentVariableDictionary.get(ctx.variable().getText()));
             } else {
                 setMappingAndSource(ctx.variable().getText(), updateProductionVariablesToTrees, currentVariableDictionary.get(ctx.variable().getText()));
@@ -654,7 +691,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 if (value_makeContext.value().func_call() != null) {
                     currentMaxQuerySize++;
                 }
-                AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.addSingleValue(value_makeContext.value().getText());
+                AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.findAugmentedTreeTop(value_makeContext.value().getText());
+                if (newestValue == null) {
+                    newestValue = currentBranchInAttributesAndValues.addSingleValue(value_makeContext.value().getText());
+                }
                 SymbolTree rightHandTree = value_makeContext.accept(this);
                 if (rightHandTree != null) {
                     subtree.addChild(rightHandTree);
