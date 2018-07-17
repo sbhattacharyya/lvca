@@ -1,5 +1,7 @@
 package edu.fit.hiai.lvca.translator.soar;
 
+import sun.awt.Symbol;
+
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
@@ -117,42 +119,62 @@ public class AugmentedSymbolTree {
         //return false
         //Else, check that edge
         for (AugmentedEdge AE : edgeNameToEdge) {
-            AugmentedEdge otherEdge = null;
+            AugmentedEdge otherEdge;
             if (AE.getName().charAt(0) == '<') {
-                if (attributeVariableToDisjunctionTest.get(AE.getName()) != null && currentAttributeValueToSelection.get(AE.getName()) == null) {
-                    int index = 0;
-                    String value = "";
-                    boolean checkOtherValues;
-                    do {
-                        for (int i = index; i < attributeVariableToDisjunctionTest.get(AE.getName()).length; i++) {
-                            value = attributeVariableToDisjunctionTest.get(AE.getName())[i];
-                            otherEdge = otherTree.findEdgeTop(value);
-                            index = i;
-                            if (otherEdge != null) {
-                                break;
-                            }
+                boolean atLeastOneMatches = false;
+                if (attributeVariableToDisjunctionTest.get(AE.getName()) != null) {
+                    String[] possibleMatches = attributeVariableToDisjunctionTest.get(AE.getName());
+                    for (String possibleMatch : possibleMatches) {
+                        otherEdge = otherTree.findEdgeTop(possibleMatch);
+                        if (otherEdge != null && AE.edgeMatches(otherEdge, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection)) {
+                            atLeastOneMatches = true;
                         }
-                        if (index == attributeVariableToDisjunctionTest.get(AE.getName()).length - 1 && otherEdge == null) {
-                            return false;
-                        }
-                        currentAttributeValueToSelection.put(AE.getName(), value);
-                        checkOtherValues = !AE.edgeMatches(otherEdge, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection);
-                    } while (checkOtherValues);
-                } else {
-                    if (currentAttributeValueToSelection.get(AE.getName()) != null) {
-                        otherEdge = otherTree.findEdgeTop(currentAttributeValueToSelection.get(AE.getName()));
-                    } else {
-                        otherEdge = otherTree.edgeNameToEdge.get(0);
-                        currentAttributeValueToSelection.put(AE.getName(), otherEdge.getName());
                     }
-                    if (otherEdge == null) {
-                        return false;
-                    } else {
-                        if (!AE.edgeMatches(otherEdge, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection)) {
-                            return false;
+                } else {
+                    for (SymbolTree possibleMatch : productionVariableComparison.get(AE.getName()).getChildren()) {
+                        otherEdge = otherTree.findEdgeTop(possibleMatch.name);
+                        if (otherEdge != null && AE.edgeMatches(otherEdge, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection)) {
+                            atLeastOneMatches = true;
                         }
                     }
                 }
+                if (!atLeastOneMatches) {
+                    return false;
+                }
+//                if (attributeVariableToDisjunctionTest.get(AE.getName()) != null && currentAttributeValueToSelection.get(AE.getName()) == null) {
+//                    int index = 0;
+//                    String value = "";
+//                    boolean checkOtherValues;
+//                    do {
+//                        for (int i = index; i < attributeVariableToDisjunctionTest.get(AE.getName()).length; i++) {
+//                            value = attributeVariableToDisjunctionTest.get(AE.getName())[i];
+//                            otherEdge = otherTree.findEdgeTop(value);
+//                            index = i;
+//                            if (otherEdge != null) {
+//                                break;
+//                            }
+//                        }
+//                        if (index == attributeVariableToDisjunctionTest.get(AE.getName()).length - 1 && otherEdge == null) {
+//                            return false;
+//                        }
+//                        currentAttributeValueToSelection.put(AE.getName(), value);
+//                        checkOtherValues = !AE.edgeMatches(otherEdge, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection);
+//                    } while (checkOtherValues);
+//                } else {
+//                    if (currentAttributeValueToSelection.get(AE.getName()) != null) {
+//                        otherEdge = otherTree.findEdgeTop(currentAttributeValueToSelection.get(AE.getName()));
+//                    } else {
+//                        otherEdge = otherTree.edgeNameToEdge.get(0);
+//                        currentAttributeValueToSelection.put(AE.getName(), otherEdge.getName());
+//                    }
+//                    if (otherEdge == null) {
+//                        return false;
+//                    } else {
+//                        if (!AE.edgeMatches(otherEdge, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection)) {
+//                            return false;
+//                        }
+//                    }
+//                }
             } else {
                 otherEdge = otherTree.findEdgeTop(AE.getName());
                 if (otherEdge == null) {
