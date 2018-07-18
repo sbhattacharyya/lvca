@@ -4,7 +4,7 @@ soar: soar_production+ ;
 
 // Grammar of Soar productions
 soar_production : ('sp'|'gp') '{' sym_constant Documentation? flags? condition_side '-->' action_side '}' ;
-Documentation : '"""' ~["]* '"""' ;
+Documentation : '"' ~["]* '"' ;
 flags : ':' ('o-support' | 'i-support' | 'chunk' | 'default' | 'template' ) ;
 
 // Grammar for Condition Side

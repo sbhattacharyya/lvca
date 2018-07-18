@@ -76,7 +76,7 @@ public class AugmentedEdge {
         return null;
     }
 
-    public boolean edgeMatches(AugmentedEdge otherEdge, Map<String, SymbolTree> productionVariableComparison, Map<String, String[]> attributeVariableToDisjunctionTest, Map<String, String> currentAttributeValueToSelection) {
+    public boolean edgeMatches(AugmentedEdge otherEdge, Map<String, SymbolTree> productionVariableComparison, Map<String, String[]> attributeVariableToDisjunctionTest) {
         for (AugmentedSymbolTree AST : values) {
             if (AST.getName().charAt(0) == '<') {
                 SymbolTree tempTree = new SymbolTree(AST.getName());
@@ -88,7 +88,7 @@ public class AugmentedEdge {
                 AugmentedSymbolTree otherAST = otherEdge.findAugmentedTreeTop(AST.getName());
                 if (otherAST == null) {
                     return false;
-                } else if (!AST.matches(otherAST, productionVariableComparison, attributeVariableToDisjunctionTest, currentAttributeValueToSelection)) {
+                } else if (!AST.matches(otherAST, productionVariableComparison, attributeVariableToDisjunctionTest)) {
                     return false;
                 }
             }
@@ -96,13 +96,20 @@ public class AugmentedEdge {
         return true;
     }
 
-    public boolean makeCountEdge(ASTCountWithValues currentEdge, boolean isUpdated) {
+    public boolean makeCountEdge(ASTCountWithValues currentEdge, boolean isUpdated, Map<String, String[]> attributeVariableToDisjunctionTest) {
         for (AugmentedSymbolTree AST : values) {
             if (!currentEdge.containsValue(AST.getName()) && !isUpdated) {
                 isUpdated = true;
             }
-            currentEdge.addValue(AST.getName());
-            AST.makeCount(currentEdge, isUpdated);
+            String[] additionalValues = attributeVariableToDisjunctionTest.get(AST.getName());
+            if (additionalValues != null) {
+                for (String nextValue : additionalValues) {
+                    currentEdge.addValue(nextValue);
+                }
+            } else {
+                currentEdge.addValue(AST.getName());
+            }
+            AST.makeCount(currentEdge, isUpdated, attributeVariableToDisjunctionTest);
         }
         return isUpdated;
     }

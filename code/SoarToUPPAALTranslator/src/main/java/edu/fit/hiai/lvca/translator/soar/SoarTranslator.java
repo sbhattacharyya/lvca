@@ -112,14 +112,14 @@ public class SoarTranslator
     private static boolean variablesMatch(Map<String, AugmentedSymbolTree> checkMap, Map<String, AugmentedSymbolTree> attributeMap, LinkedList<String> checkVariableDictionary, String attributeStateVariable, HashMap<String, String> attributeVariablesMatch, Map<String, String[]> attributeVariableToDisjunctionTest) {
         Map<String, SymbolTree> productionVariableComparison = new HashMap<>();
         productionVariableComparison.put(checkVariableDictionary.get(0), new SymbolTree(attributeStateVariable));
-        if (checkMap.get(checkVariableDictionary.get(0)).matches(attributeMap.get(attributeStateVariable), productionVariableComparison, attributeVariableToDisjunctionTest, new HashMap<>())) {
+        if (checkMap.get(checkVariableDictionary.get(0)).matches(attributeMap.get(attributeStateVariable), productionVariableComparison, attributeVariableToDisjunctionTest)) {
             attributeVariablesMatch.put(attributeStateVariable, checkVariableDictionary.get(0));
             for (int i = 1; i < checkVariableDictionary.size(); i++) {
                 String variableName = checkVariableDictionary.get(i);
                 SymbolTree comparisonCollection = productionVariableComparison.get(variableName);
                 int numMatches = 0;
                 for (SymbolTree possibleVariableMatch : comparisonCollection.getChildren()) {
-                    if (checkMap.get(variableName).matches(attributeMap.get(possibleVariableMatch.name), productionVariableComparison, attributeVariableToDisjunctionTest, new HashMap<>())) {
+                    if (checkMap.get(variableName).matches(attributeMap.get(possibleVariableMatch.name), productionVariableComparison, attributeVariableToDisjunctionTest)) {
                         attributeVariablesMatch.put(possibleVariableMatch.name, variableName);
                         numMatches++;
                     }
@@ -133,11 +133,11 @@ public class SoarTranslator
         return false;
     }
 
-    private static boolean applyVariables(Map<String, ASTCountWithValues> attributesAndValuesPerProductionCount, Map<String, AugmentedSymbolTree> applyMap, HashMap<String, String> attributeVariablesMatch) {
+    private static boolean applyVariables(Map<String, ASTCountWithValues> attributesAndValuesPerProductionCount, Map<String, AugmentedSymbolTree> applyMap, HashMap<String, String> attributeVariablesMatch, Map<String, String[]> attributeVariableToDisjunctionTest) {
         boolean somethingChanged = false;
         for (String attributeVariable : attributeVariablesMatch.keySet()) {
             String keyApplyMap = attributeVariablesMatch.get(attributeVariable);
-            if (applyMap.get(keyApplyMap) != null && applyMap.get(keyApplyMap).makeCount(attributesAndValuesPerProductionCount.get(attributeVariable), false) && !somethingChanged) {
+            if (applyMap.get(keyApplyMap) != null && applyMap.get(keyApplyMap).makeCount(attributesAndValuesPerProductionCount.get(attributeVariable), false, attributeVariableToDisjunctionTest) && !somethingChanged) {
                 somethingChanged = true;
             }
         }
@@ -153,7 +153,7 @@ public class SoarTranslator
         return true;
     }
 
-    private static Map<String, Map<String, ASTCountWithValues>> getAttributesAndValuesPerProductionCount(Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction) {
+    private static Map<String, Map<String, ASTCountWithValues>> getAttributesAndValuesPerProductionCount(Map<String, Map<String, AugmentedSymbolTree>> attributesAndValuesPerProduction, Map<String, String[]> attributeVariableToDisjunctionTest) {
         Map<String, Map<String, ASTCountWithValues>> attributesAndValuesPerProductionCount = new HashMap<>();
         for(String productionName : attributesAndValuesPerProduction.keySet()) {
             Map<String, ASTCountWithValues> currentAttributesAndValuesCount = new HashMap<>();
@@ -161,7 +161,7 @@ public class SoarTranslator
             Map<String, AugmentedSymbolTree> currentAttributesAndValues = attributesAndValuesPerProduction.get(productionName);
             for (String variable : currentAttributesAndValues.keySet()) {
                 ASTCountWithValues variableCountTree = new ASTCountWithValues(variable);
-                currentAttributesAndValues.get(variable).makeCount(variableCountTree, false);
+                currentAttributesAndValues.get(variable).makeCount(variableCountTree, false, attributeVariableToDisjunctionTest);
                 currentAttributesAndValuesCount.put(variable, variableCountTree);
             }
         }
@@ -177,18 +177,18 @@ public class SoarTranslator
             }
         }
 
-        Map<String, Map<String, ASTCountWithValues>> attributesAndValuesPerProductionCount = getAttributesAndValuesPerProductionCount(attributesAndValuesPerProduction);
+        Map<String, Map<String, ASTCountWithValues>> attributesAndValuesPerProductionCount = getAttributesAndValuesPerProductionCount(attributesAndValuesPerProduction, attributeVariableToDisjunctionTest);
 
         boolean repeat = false;
         do {
             for (String productionName : productionNames) {
                 for (String productionName2 : attributesAndValuesPerProduction.keySet()) {
-                    if (productionName.equals(productionName2)) {
+                    if (productionName.equals(productionName2) || attributesAndValuesPerProduction.get(productionName2).size() == 0) {
                         continue;
                     }
                     HashMap<String, String> attributeVariablesMatch = new HashMap<>();
                     if (variablesMatch(checkAttributesAndValuesPerProduction.get(productionName), attributesAndValuesPerProduction.get(productionName2), variableHierarchy.get(productionName), variableHierarchy.get(productionName2).get(0), attributeVariablesMatch, attributeVariableToDisjunctionTest)) {
-                        repeat = applyVariables(attributesAndValuesPerProductionCount.get(productionName2), updateAttributesAndValuesPerProduction.get(productionName), attributeVariablesMatch);
+                        repeat = applyVariables(attributesAndValuesPerProductionCount.get(productionName2), updateAttributesAndValuesPerProduction.get(productionName), attributeVariablesMatch, attributeVariableToDisjunctionTest);
                     }
                 }
             }

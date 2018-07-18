@@ -5,6 +5,7 @@ import edu.fit.hiai.lvca.antlr4.SoarParser;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ParseTree;
+import sun.awt.Symbol;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -267,6 +268,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 child = child.getChildren().get(1);
             }
             attachPoint.addChild(child);
+            workingMemoryTree.addChild(child);
         }
 
         productionSource = null;
@@ -279,6 +281,16 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         SymbolTree variableBranch = attribute.DFS("variable").getChildren().get(0);
         attributeVariableToArrayName.put(variableBranch.name, disjunctionBranch.name);
         return variableBranch.name;
+    }
+
+    private SymbolTree addAttributeToSubtrees(SymbolTree subtree, SymbolTree subtreeWithChildren, String text) {
+        if (subtree == null) {
+            subtree = new SymbolTree(text);
+        } else {
+            subtree.addChild(new SymbolTree(text));
+        }
+        subtreeWithChildren.addChild(new SymbolTree(text));
+        return subtree;
     }
 
     /**
@@ -294,29 +306,33 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     {
         boolean conditionIsNegated = ctx.getText().charAt(0) == '-';
         //The attribute or list of attributes following the caret. This SymbolTree therefore has no branching
-        SymbolTree subtree = getTreeFromList(ctx.attr_test());
+        SymbolTree subtree = null;
         SymbolTree subtreeWithChildren = new SymbolTree("withChildren");
-        subtreeWithChildren.addChild(getTreeFromList(ctx.attr_test()));
 
         onAttribute = true;
         for (SoarParser.Attr_testContext attr_testContext : ctx.attr_test()) {
             currentMaxQuerySize++;
             SymbolTree attribute = attr_testContext.accept(this);
+            String attributeName = attr_testContext.getText();
             if (productionSource != null) {
                 if (attr_testContext.getText().equals("operator")) {
                     currentBranchInAttributesAndValues = null;
+                    subtree = addAttributeToSubtrees(subtree, subtreeWithChildren, attributeName);
                     break;
                 } else {
                     if (attr_testContext.test().conjunctive_test() != null) {
                         String variableName = addAttributeVariableToArrayName(attribute);
                         currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(variableName);
+                        attributeName = variableName;
                     } else {
+                        subtreeWithChildren.addChild(new SymbolTree(attr_testContext.getText()));
                         currentBranchInAttributesAndValues = productionSource.addEdgeWithoutValues(attribute.name);
                     }
                 }
             } else if (attr_testContext.test().conjunctive_test() != null) {
                 addAttributeVariableToArrayName(attribute);
             }
+            subtree = addAttributeToSubtrees(subtree, subtreeWithChildren, attributeName);
         }
         onAttribute = false;
 
@@ -431,7 +447,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 contains = true;
                 break;
             } else {
-                latestIndex = Math.max(latestIndex, nextIndex);
+                latestIndex = Math.max(latestIndex, nextIndex + 1);
             }
         }
         String arrayName = "array_" + latestIndex;
