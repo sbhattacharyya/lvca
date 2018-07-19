@@ -47,4 +47,26 @@ public class UtilityForVisitors {
         }
         return isWhat;
     }
+
+    public static String relationToText(String relation) {
+        String relationText;
+        switch(relation) {
+            case "<>": relationText = "isNotEqualTo";
+                break;
+            case "<": relationText = "isLessThan";
+                break;
+            case ">": relationText = "isGreaterThan";
+                break;
+            case "<=": relationText = "isLessThanOrEqualTo";
+                break;
+            case ">=": relationText = "isGreaterThanOrEqualTo";
+                break;
+            case "<=>": relationText = "isSameTypeAs";
+                break;
+            default:
+                relationText = null;
+                break;
+        }
+        return relationText;
+    }
 }

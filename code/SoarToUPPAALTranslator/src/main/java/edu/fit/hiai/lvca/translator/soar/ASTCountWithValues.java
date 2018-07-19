@@ -102,4 +102,9 @@ public class ASTCountWithValues {
             currentTriad.setName(temp);
         }
     }
+
+    public void copyValues(String[] attributes) {
+        HashSet<String> attribute1Values = edges.get(attributes[0]).values;
+        attribute1Values.forEach(av -> edges.get(attributes[1]).addValue(av));
+    }
 }

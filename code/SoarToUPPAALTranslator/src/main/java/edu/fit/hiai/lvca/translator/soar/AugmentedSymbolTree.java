@@ -182,4 +182,11 @@ public class AugmentedSymbolTree {
         }
         return isUpdated;
     }
+
+    public void checkStateMatches(ASTCountWithValues attributesAndValuesState, AugmentedSymbolTree stateAttributesAndValuesForCheck, int level, String[] attributesMatch, int attributeMatchIndex) {
+        for (AugmentedEdge AE : edgeNameToEdge) {
+            attributesMatch[attributeMatchIndex] = AE.getName();
+            AE.checkStateMatchesEdge(attributesAndValuesState, stateAttributesAndValuesForCheck, level + 1, attributesMatch, attributeMatchIndex + 1);
+        }
+    }
 }

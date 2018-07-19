@@ -49,8 +49,10 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private int maxQuerySize = 0;
     private int currentMaxQuerySize;
     private Map<String, Boolean> productionToOSupported = new HashMap<>();
-    private Map<String, String[]> arrayNameToDisjunctionTest = new HashMap<>();
-    private Map<String, String> attributeVariableToArrayName = new HashMap<>();
+    private Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction = new HashMap<>();
+    private Map<String, String[]> arrayNameToDisjunctionTest;
+    private Map<String, String> attributeVariableToArrayName;
+    private Map<String, Map<String, String>> attributeVariableToArrayNamePerProduction = new HashMap<>();
     private boolean onAttribute;
 
     /**
@@ -109,14 +111,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     public Map<String, Boolean> getProductionToOSupported() { return productionToOSupported; }
 
-    public Map<String, String[]> getAttributeVariableToDisjunctionTest()
-    {
-        Map<String, String[]> attributeVariableToDisjunctionTest = new HashMap<>();
-        for (Map.Entry<String, String> attributeVariableToArrayName : attributeVariableToArrayName.entrySet()) {
-            attributeVariableToDisjunctionTest.put(attributeVariableToArrayName.getKey(), arrayNameToDisjunctionTest.get(attributeVariableToArrayName.getValue()));
-        }
-        return attributeVariableToDisjunctionTest;
-    }
+    public Map<String, Map<String, String[]>> getAttributeVariableToDisjunctionTest() { return attributeVariableToDisjunctionTestPerProduction; }
+
+    public Map<String, Map<String, String>> getAttributeVariableToArrayName() { return attributeVariableToArrayNamePerProduction; }
 
     /**
      * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
@@ -145,6 +142,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         currentVariablesCreatedOrUpdated = new ProductionVariables(ctx.sym_constant().getText());
         currentVariableDictionary = new HashMap<>();
         isProductionOSupported = false;
+
+        attributeVariableToArrayName = new HashMap<>();
+        arrayNameToDisjunctionTest = new HashMap<>();
 
         currentMaxQuerySize = 0;
         ctx.condition_side().accept(this);
@@ -176,6 +176,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         globalVariableDictionary.put(ctx.sym_constant().getText(), variablePaths);
         productionToOSupported.put(ctx.sym_constant().getText(), isProductionOSupported);
+        Map<String, String[]> attributeVariableToDisjunctionTest = new HashMap<>();
+        for (Map.Entry<String, String> attributeVariableToArrayName : attributeVariableToArrayName.entrySet()) {
+            attributeVariableToDisjunctionTest.put(attributeVariableToArrayName.getKey(), arrayNameToDisjunctionTest.get(attributeVariableToArrayName.getValue()));
+        }
+        attributeVariableToDisjunctionTestPerProduction.put(ctx.sym_constant().getText(), attributeVariableToDisjunctionTest);
+        attributeVariableToArrayNamePerProduction.put(ctx.sym_constant().getText(), attributeVariableToArrayName);
         return null;
     }
 
@@ -330,7 +336,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                     }
                 }
             } else if (attr_testContext.test().conjunctive_test() != null) {
-                addAttributeVariableToArrayName(attribute);
+                attributeName = addAttributeVariableToArrayName(attribute);
             }
             subtree = addAttributeToSubtrees(subtree, subtreeWithChildren, attributeName);
         }
@@ -478,24 +484,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     @Override
     public SymbolTree visitRelation(SoarParser.RelationContext ctx)
     {
-        String relationText;
-        switch(ctx.getText()) {
-            case "<>": relationText = "isNotEqualTo";
-                       break;
-            case "<": relationText = "isLessThan";
-                      break;
-            case ">": relationText = "isGreaterThan";
-                      break;
-            case "<=": relationText = "isLessThanOrEqualTo";
-                       break;
-            case ">=": relationText = "isGreaterThanOrEqualTo";
-                       break;
-            case "<=>": relationText = "isSameTypeAs";
-                        break;
-            default:
-                relationText = null;
-                break;
-        }
+        String relationText = UtilityForVisitors.relationToText(ctx.getText());
         SymbolTree returnTree;
         if (relationText != null) {
             returnTree = new SymbolTree(relationText);
@@ -699,6 +688,9 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         nestedVariableNames.clear();
         for (SoarParser.Variable_or_sym_constantContext variable_or_sym_constantContext : ctx.variable_or_sym_constant()) {
+            if (variable_or_sym_constantContext.sym_constant() != null) {
+                stringSymbols.add(variable_or_sym_constantContext.getText());
+            }
             for (SoarParser.Value_makeContext value_makeContext : ctx.value_make()) {
                 currentMaxQuerySize++;
                 if (!isProductionOSupported && value_makeContext.value_pref_clause().size() == 0 && value_makeContext.value_pref_binary_value() == null) {
@@ -742,19 +734,19 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return subtree;
     }
 
-    /**
-     * Represents the attribute following the caret on the action side. Can also be a variable, the translator does not
-     * handle variable attributes. //fixme
-     * Returns a singleton SymbolTree wrapping the text.
-     *
-     * @param ctx
-     * @return
-     */
-    @Override
-    public SymbolTree visitVariable_or_sym_constant(SoarParser.Variable_or_sym_constantContext ctx)
-    {
-        return new SymbolTree(ctx.getText());
-    }
+//    /**
+//     * Represents the attribute following the caret on the action side. Can also be a variable, the translator does not
+//     * handle variable attributes. //fixme
+//     * Returns a singleton SymbolTree wrapping the text.
+//     *
+//     * @param ctx
+//     * @return
+//     */
+//    @Override
+//    public SymbolTree visitVariable_or_sym_constant(SoarParser.Variable_or_sym_constantContext ctx)
+//    {
+//        return new SymbolTree(ctx.getText());
+//    }
 
     /**
      * On the action side, this context is everything after the attribute, a combinations of values, variables, and

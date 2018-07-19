@@ -113,4 +113,14 @@ public class AugmentedEdge {
         }
         return isUpdated;
     }
+
+    public void checkStateMatchesEdge(ASTCountWithValues attributesAndValuesState, AugmentedSymbolTree stateAttributesAndValuesForCheck, int level, String[] attributesMatch, int attributeMatchIndex) {
+        for (AugmentedSymbolTree AST : values) {
+            if (level == 4 && AST.getName().equals(stateAttributesAndValuesForCheck.getName())) {
+                attributesAndValuesState.copyValues(attributesMatch);
+            } else {
+                stateAttributesAndValuesForCheck.checkStateMatches(attributesAndValuesState, AST, level + 1, attributesMatch, attributeMatchIndex);
+            }
+        }
+    }
 }

@@ -34,7 +34,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private LinkedList<String> _uppaalOperatorCollection;
     private LinkedList<UppaalAttributeValueTriad> _AVCollection;
     private Map<String, Map<String, String>> _variablesToPathWithID;
-    private Map<String, Integer> _attributesToIDs;
     private Map<String, String> conditionSideVariablesToTemps;
     private LinkedList<String> conditionProductionIdentifiers;
     private LinkedList<String> conditionProductionAttributes;
@@ -49,8 +48,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private int _latestIndex;
     private Map<String, Boolean> _productionToOSupported;
     private Map<String, Integer> _variableToNumAttributes;
+    private Map<String, Map<String, String[]>> _attributeVariableToDisjunctionTestPerProduction;
+    private Map<String, Map<String, String>> _attributeVariableToArrayNamePerProduction;
+    private Map<String, String[]> _disjunctionArrayNameToArray;
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Integer> attributesToIDs, int maxQuerySize, Map<String, Boolean> productionToOSupported, Map<String, Integer> variableToNumAttributes) {
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, int maxQuerySize, Map<String, Boolean> productionToOSupported, Map<String, Integer> variableToNumAttributes, Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction, Map<String, Map<String, String>> attributeVariableToArrayNamePerProduction) {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
@@ -61,11 +63,48 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         _uppaalOperatorCollection = uppaalOperatorCollection;
         _AVCollection = AVCollection;
         _variablesToPathWithID = variablesToPathWithID;
-        _attributesToIDs = attributesToIDs;
         _maxQuerySize = maxQuerySize + 1;
         _latestNum = 2 + _globals.size() + _uppaalOperatorCollection.size();
         _productionToOSupported = productionToOSupported;
         _variableToNumAttributes = variableToNumAttributes;
+        _attributeVariableToDisjunctionTestPerProduction = attributeVariableToDisjunctionTestPerProduction;
+        _attributeVariableToArrayNamePerProduction = cleanAttributeVariableToArrayName();
+    }
+
+    private String getArrayName(String[] checkArray, int[] index) {
+        String arrayName = null;
+        for (Map.Entry<String, String[]> arrayNameEntry : _disjunctionArrayNameToArray.entrySet()) {
+            if (Arrays.equals(arrayNameEntry.getValue(), checkArray)) {
+                arrayName = arrayNameEntry.getKey();
+                break;
+            }
+        }
+        if (arrayName == null) {
+            arrayName = "noneBut_" + index[0];
+            _disjunctionArrayNameToArray.put(arrayName, checkArray);
+            index[0]++;
+        }
+        return arrayName;
+    }
+
+    /**
+     * This is super space inefficent right now.  It's checking if the arrays are equal by looping through all the elements in both arrays
+     * This can be made much more efficent by storing the arrays as encoded single values which can then be compared
+     * #todo make this more efficent
+     * @return
+     */
+    private Map<String, Map<String, String>> cleanAttributeVariableToArrayName() {
+        int[] index = {1};
+        _disjunctionArrayNameToArray = new HashMap<>();
+        Map<String, Map<String, String>> productionToAttributeToArrayName = new HashMap<>();
+        for (Map.Entry<String, Map<String, String[]>> productionToVariable : _attributeVariableToDisjunctionTestPerProduction.entrySet()) {
+            Map<String, String> currentVariableToArrayName = new HashMap<>();
+            productionToAttributeToArrayName.put(productionToVariable.getKey(), currentVariableToArrayName);
+            for (Map.Entry<String, String[]> variableToArray : productionToVariable.getValue().entrySet()) {
+                currentVariableToArrayName.put(variableToArray.getKey(), getArrayName(variableToArray.getValue(), index));
+            }
+        }
+        return productionToAttributeToArrayName;
     }
 
     private int getNextIndex(int i) {
@@ -130,18 +169,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
         index++;
         for (String variable : _uppaalOperatorCollection) {
-            addConstantToGlobals(globalVariables, variable, index++);
+            addConstantToGlobals(globalVariables, SoarTranslator.simplifiedString(variable), index++);
         }
         addConstantToGlobals(globalVariables, "finalOp", index++);
         addConstantToGlobals(globalVariables, "_state", -1);
         index = 1;
-        for (String variable : _attributesToIDs.keySet()) {
-            int attributeIndex = _attributesToIDs.get(variable);
-            addConstantToGlobals(globalVariables, variable, attributeIndex);
-            index = Math.max(attributeIndex + 1, index);
-        }
 
-        addConstantToGlobals(globalVariables, "superstate", index);
         for (String variable : _variableToNumAttributes.keySet()) {
             String variableText;
             if (variable.equals("state_-1")) {
@@ -149,7 +182,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             } else {
                 variableText = variable;
             }
-            addConstantToGlobals(globalVariables, variableText + "_num_attributes", _variableToNumAttributes.get(variable));
+            addConstantToGlobals(globalVariables, SoarTranslator.simplifiedString(variableText) + "_num_attributes", _variableToNumAttributes.get(variable));
+        }
+
+        for (Map.Entry<String, String[]> disjunctionMap : _disjunctionArrayNameToArray.entrySet()) {
+            addConstantToGlobals(globalVariables, disjunctionMap.getKey(), index++);
+            globalVariables.append("int ").append(disjunctionMap.getKey()).append("_array = {");
+            for (int i = 0; i< disjunctionMap.getValue().length; i++) {
+                if (i != 0) {
+                    globalVariables.append(", ");
+                }
+                globalVariables.append(SoarTranslator.simplifiedString(disjunctionMap.getValue()[i]));
+            }
+            globalVariables.append("};\n");
         }
 
         vars.append(globalVariables.toString());
@@ -177,6 +222,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "const int subtractFunction = -5;\n" +
                 "const int multiplyFunction = -6;\n" +
                 "const int divideFunction = -7;\n" +
+                "const int extraRestriction = -8;\n" +
+                "const int isNotEqualTo = -9;\n" +
+                "const int isGreaterThan = -10;\n" +
                 "const int MAX_GLOBAL_SIZE = " + _maxQuerySize + ";\n" +
                 "const int numAVs = 8;\n" +
                 "int numAVCounter = 0;\n" +
@@ -188,6 +236,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "int doesContainArray[MAX_GLOBAL_SIZE];\n" +
                 "int doesContainTrue[MAX_GLOBAL_SIZE];\n" +
                 "int doesContainDefault[MAX_GLOBAL_SIZE];\n" +
+                "int attributeTempArray[MAX_GLOBAL_SIZE};\n" +
                 "int globalIndex = 0;\n" +
                 "bool checkContains;\n" +
                 "broadcast chan Reset;\n" +
@@ -386,7 +435,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         StringBuilder switchForNumAttributes = new StringBuilder();
         switchForNumAttributes.append("\tif (variable == finalOp){\n\t\treturn 1;\n\t}");
         for (String variable : _uppaalOperatorCollection) {
-            switchForNumAttributes.append(" else if (variable == " + variable + ") {\n").append("\t\treturn " + variable + "_num_attributes;\n").append("\t}");
+            String correctedName = SoarTranslator.simplifiedString(variable);
+            switchForNumAttributes.append(" else if (variable == " + correctedName + ") {\n").append("\t\treturn " + correctedName + "_num_attributes;\n").append("\t}");
         }
         switchForNumAttributes.append(" else {\n").append("\t\treturn -1;\n").append("\t}\n");
         vars.append(switchForNumAttributes).append("}\n").append("\n");
@@ -627,12 +677,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             currentTemplateDeclaration.append(currentLatestNum++ + ";\n");
         }
 
-        for (String productionVariable : _productionVariables.values()) {
-            currentTemplateDeclaration.append("int ");
-            currentTemplateDeclaration.append(productionVariable);
-            currentTemplateDeclaration.append(";\n");
-        }
-        currentTemplateDeclaration.append("\n");
+//        for (String productionVariable : _productionVariables.values()) {
+//            currentTemplateDeclaration.append("int ");
+//            currentTemplateDeclaration.append(productionVariable);
+//            currentTemplateDeclaration.append(";\n");
+//        }
+//        currentTemplateDeclaration.append("\n");
 
         StringBuilder[] productionArrays = getArrayBuilders();
         String startingSpaces = "                                                   ";
@@ -905,35 +955,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         String idTest = ctx.id_test().getText();
         Map<String, String> localVariableDictionary = _variableDictionary.get(productionName);
         ProductionVariables localActualVariables = _actualVariablesPerProduction.get(productionName);
+        Map<String, String> attributeVariableToArrayName = _attributeVariableToArrayNamePerProduction.get(productionName);
 
-        innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest, localActualVariables);
+        innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest, localActualVariables, attributeVariableToArrayName);
 
         return null;
     }
 
-    private String determineInverseAssignment(String regularAssignment) {
-        switch (regularAssignment) {
-            case "==":
-                return "!=";
-            case "!=":
-                return "==";
-            case ">":
-                return "<=";
-            case "<":
-                return ">=";
-            default:
-                return "==";
+    private String getVaribleFromConjunctive(SoarParser.Conjunctive_testContext ctx) {
+        String variable = null;
+        for (SoarParser.Simple_testContext simple_testContext : ctx.simple_test()) {
+            if (simple_testContext.relational_test() != null && simple_testContext.relational_test().relation() == null) {
+                variable = simple_testContext.relational_test().single_test().variable().getText();
+                break;
+            }
         }
+        return variable;
     }
 
-    private void addOperatorColumn(String dummyVariable) {
-        conditionProductionIdentifiers.add("finalOp");
-        conditionProductionAttributes.add("operator");
-        conditionProductionValues.add(dummyVariable);
-        conditionProductionTemp.add("0");
-    }
-
-    private void innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest, ProductionVariables localActualVariables) {
+    private void innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest, ProductionVariables localActualVariables, Map<String, String> attributeVariableToArrayName) {
         // Variable in left hand side
         if (localVariableDictionary.containsKey(idTest)) {
             // Build the comparisons
@@ -961,11 +1001,21 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 }
 
                 String attrPath = attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).getText();
+                String dummyValue = conditionSideVariablesToTemps.get(attrPath);
+                if (dummyValue != null) {
+                    attrPath = dummyValue;
+                } else if (attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test() != null) {
+                    attrPath = getVaribleFromConjunctive(attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test());
+                    if (attributeVariableToArrayName.get(attrPath) != null) {
+                        attrPath = attributeVariableToArrayName.get(attrPath);
+                    }
+                } else {
+                    attrPath = SoarTranslator.simplifiedString(attrPath);
+                }
                 conditionProductionIdentifiers.add(attrPath.equals("operator") ? "finalOp" : lastVariable);
                 conditionProductionAttributes.add(attrPath);
 
                 String value;
-                StringBuilder inverseValue = new StringBuilder("tempValue");
 
                 if (attributeCtx.getText().startsWith("-^")) {
                     conditionProductionValues.add("EMPTY");
@@ -976,13 +1026,18 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     if (numberOfValues == 1) {
                         Node relationAndRightTerm = attributeCtx.value_test(0).accept(this);
 
-                        if (relationAndRightTerm.getProperty("rel") != null) {
+                        if (attributeCtx.value_test(0).test().conjunctive_test() != null || attributeCtx.value_test(0).test().simple_test().disjunction_test() == null) {
 
-                            String relation = getText(relationAndRightTerm, "rel");
+                            String[] relations = null;
+                            String[] variablesForRelations = null;
                             String rightTerm;
 
-                            if (relation.equals("=")) {
-                                relation = "==";
+                            if (relationAndRightTerm.getProperty("setOfRel") != null) {
+                                relations = getText(relationAndRightTerm, "setOfRel").split(",");
+                                variablesForRelations = new String[relations.length];
+                                for (int i = 0; i < relations.length; i++) {
+                                    variablesForRelations[i] = getText(relationAndRightTerm, relations[i]);
+                                }
                             }
 
                             if (relationAndRightTerm.getProperty("var") != null) {
@@ -1005,9 +1060,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                                 value = SoarTranslator.simplifiedString(rightTerm);
                             }
 
-                            if (rightTerm.equals("true") && relation.equals("==")) {
-                            } else if (rightTerm.equals("false") && relation.equals("==")) {
-                            } else if (value.length() > 0) {
+                           if (value.length() > 0) {
                                 if (value.equals("nilAnything")) {
                                     conditionProductionValues.add(_latestIndex, value);
                                     conditionProductionIdentifiers.add(_latestIndex, conditionProductionIdentifiers.removeLast());
@@ -1018,29 +1071,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                                     conditionProductionValues.add(value);
                                     conditionProductionTemp.add("0");
                                 }
+                                if (relations != null) {
+                                    for(int i = 0; i < relations.length; i++) {
+                                        conditionProductionIdentifiers.add(_latestIndex, conditionProductionTemp.get(_latestIndex - 1));
+                                        conditionProductionAttributes.add(_latestIndex, "extraRestriction");
+                                        conditionProductionValues.add(_latestIndex, variablesForRelations[i]);
+                                        conditionProductionTemp.add(_latestIndex, relations[i]);
+                                        _latestIndex++;
+                                    }
+                                }
                             }
                         } else if (relationAndRightTerm.getProperty("disjunction") != null) {
                             //FIXFIXFIX
-                            String[] disjunctionCollection = getText(relationAndRightTerm, "disjunction").split(",");
-                            String simplifiedLeftTerm = SoarTranslator.simplifiedString("REPLACEME");
-                            StringBuilder disjunctionRelations = new StringBuilder();
-                            disjunctionRelations.append("(");
-                            for (int i = 0; i < disjunctionCollection.length; i++) {
-                                if (i != 0) {
-                                    disjunctionRelations.append(" || ");
-                                }
-                                disjunctionRelations.append(simplifiedLeftTerm);
-                                disjunctionRelations.append(" == ");
-                                disjunctionRelations.append(SoarTranslator.simplifiedString(disjunctionCollection[i]));
-                            }
-                            disjunctionRelations.append(")");
-                            if (!disjunctionRelations.equals("()")) {
-                                String disjunctionString = disjunctionRelations.toString();
-//                                stateVariableComparisons.add(disjunctionString);
-                            }
                         }
                     } else {
-
                         // use "path_to_var[index] = constant" pattern
                     }
                 }
@@ -1064,8 +1108,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         String idTest = ctx.id_test().getText();
         Map<String, String> localVariableDictionary = _variableDictionary.get(productionName);
         ProductionVariables localActualVariables = _actualVariablesPerProduction.get(productionName);
+        Map<String, String> attributeVariableToArrayName = _attributeVariableToArrayNamePerProduction.get(productionName);
 
-        innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest, localActualVariables);
+        innerConditionVisit(ctx.attr_value_tests(), localVariableDictionary, idTest, localActualVariables, attributeVariableToArrayName);
 
         return null;
     }
@@ -1097,7 +1142,29 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     @Override
     public Node visitConjunctive_test(SoarParser.Conjunctive_testContext ctx) {
-        return null;
+        Node returnNode = textAsNode("setOfRel", "");
+        for (SoarParser.Simple_testContext simple_testContext : ctx.simple_test()) {
+            Node simpleNode = simple_testContext.accept(this);
+            if (simpleNode != null) {
+                if (simpleNode.getProperty("rel") == null) {
+                    returnNode.setProperty("var", getText(simpleNode, "var"));
+                } else {
+                    String variableOrConstant;
+                    if (simpleNode.getProperty("var") != null) {
+                        variableOrConstant = getText(simpleNode, "var");
+                    } else {
+                        variableOrConstant = getText(simpleNode, "const");
+                    }
+                    if (returnNode.getProperty(getText(simpleNode, "rel")) == null) {
+                        returnNode.setProperty(getText(simpleNode, "rel"), variableOrConstant);
+                        returnNode.setProperty("setOfRel", getText(returnNode, "setOfRel") + (getText(returnNode, "setOfRel").length() > 0 ? "," : "") + getText(simpleNode, "rel"));
+                    } else {
+                        returnNode.setProperty(getText(returnNode, getText(simpleNode, "rel")) + "," + variableOrConstant, getText(simpleNode, "rel"));
+                    }
+                }
+            }
+        }
+        return returnNode;
     }
 
     @Override
@@ -1112,35 +1179,28 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     @Override
     public Node visitDisjunction_test(SoarParser.Disjunction_testContext ctx) {
-        StringBuilder disjunctionCollection = new StringBuilder();
-        for (int i = 0; i < ctx.constant().size(); i++) {
-            if (i != 0) {
-                disjunctionCollection.append(",");
-            }
-            disjunctionCollection.append(getText(ctx.constant(i).accept(this), "const"));
-        }
-        return textAsNode("disjunction", disjunctionCollection.toString());
+        return null;
     }
 
     @Override
     public Node visitRelational_test(SoarParser.Relational_testContext ctx) {
-        String relation = "==";
+        Node relationNode = ctx.single_test().accept(this);
 
         if (ctx.relation() != null) {
-            relation = ctx.relation().getText();
-
-            if (relation.equals("<>")) {
-                relation = "!=";
-            }
+            relationNode.setProperty("rel", getText(ctx.relation().accept(this), "rel"));
         }
-        Node returnNode = ctx.single_test().accept(this);
-        returnNode.setProperty("rel", relation);
-        return returnNode;
+        return relationNode;
     }
 
     @Override
     public Node visitRelation(SoarParser.RelationContext ctx) {
-        return null;
+
+        String relationText = UtilityForVisitors.relationToText(ctx.getText());
+        Node returnTree = generateNode();
+        if (relationText != null) {
+            returnTree.setProperty("rel", relationText);
+        }
+        return returnTree;
     }
 
     @Override
@@ -1216,9 +1276,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             } else {
                 variable = pathWithId;
             }
+            variable = SoarTranslator.simplifiedString(variable);
         }
+
         for (SoarParser.Attr_value_makeContext attrCtx : ctxs) {
-            String attribute = attrCtx.variable_or_sym_constant(attrCtx.variable_or_sym_constant().size() - 1).getText();
+            String attribute = SoarTranslator.simplifiedString(attrCtx.variable_or_sym_constant(attrCtx.variable_or_sym_constant().size() - 1).getText());
 
             for (SoarParser.Value_makeContext value_makeContext : attrCtx.value_make()) {
                 actionProductionIdentifiers.add(variable);
@@ -1272,7 +1334,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (rightSideElement.getProperty("const") != null) {
                 actionProductionValues.add(getText(rightSideElement, "const"));
             } else if (rightSideElement.getProperty("expr") != null) {
-                actionProductionValues.add(getText(rightSideElement, "firstValue"));
+                actionProductionValues.add(SoarTranslator.simplifiedString(getText(rightSideElement, "firstValue")));
                 actionProductionFunctions.add(getText(rightSideElement, "expr"));
             } else if (rightSideElement.getProperty("pref") != null) {
                 if (getText(rightSideElement, "pref").equals("remove")) {
@@ -1318,7 +1380,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 String rightSideVar = getText(rightSideElement, "var");
                 String variable = conditionSideVariablesToTemps.get(rightSideVar);
                 if (variable == null) {
-                    variable = getVariable(rightSideVar, localVariablePathsWithID);
+                    variable = SoarTranslator.simplifiedString(getVariable(rightSideVar, localVariablePathsWithID));
                 }
                 actionProductionValues.add(variable);
             }
@@ -1734,20 +1796,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (systemProcesses.length() > 1) {
                 systemProcesses.append(", ");
             }
-            systemProcesses.append(UAT.getName());
-            instantiationsCollection.append(UAT.getName());
+            systemProcesses.append(SoarTranslator.simplifiedString(UAT.getName()));
+            instantiationsCollection.append(SoarTranslator.simplifiedString(UAT.getName()));
             instantiationsCollection.append(" = ");
             instantiationsCollection.append("Attribute_Value(");
-            instantiationsCollection.append(UAT.getNumValues() + ", " + UAT.getOperatorIndex() + ", " + UAT.getAttributeIndex());
+            instantiationsCollection.append(UAT.getNumValues() + ", " + SoarTranslator.simplifiedString(UAT.getOperatorIndex()) + ", " + UAT.getAttributeIndex());
             instantiationsCollection.append(");\n");
         }
 
         if (systemProcesses.length() > 1) {
             systemProcesses.append(", ");
         }
-        addExtraAV("AV_Final_Operator", 1, "finalOp", "operator", systemProcesses, instantiationsCollection);
+        addExtraAV("AV_final_operator", 1, "finalOp", "operator", systemProcesses, instantiationsCollection);
         systemProcesses.append(", ");
-        addExtraAV("AV_State_Superstate", 1, "_state", "superstate", systemProcesses, instantiationsCollection);
+        addExtraAV("AV_state_superstate", 1, "_state", "superstate", systemProcesses, instantiationsCollection);
 
         return new String[]{instantiationsCollection.toString(), systemProcesses.toString()};
     }
