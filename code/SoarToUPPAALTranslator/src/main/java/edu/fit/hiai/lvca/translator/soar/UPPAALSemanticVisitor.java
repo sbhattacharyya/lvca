@@ -43,6 +43,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private LinkedList<String> actionProductionAttributes;
     private LinkedList<String> actionProductionValues;
     private LinkedList<String> actionProductionFunctions;
+    private Map<String, String> attributesToTemps;
+    private LinkedList<String> attributeTemps;
     private int _latestNum;
     private int _maxQuerySize;
     private int _latestIndex;
@@ -64,7 +66,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         _AVCollection = AVCollection;
         _variablesToPathWithID = variablesToPathWithID;
         _maxQuerySize = maxQuerySize + 1;
-        _latestNum = 2 + _globals.size() + _uppaalOperatorCollection.size();
+        _latestNum = 1 + _globals.size() + _uppaalOperatorCollection.size();
         _productionToOSupported = productionToOSupported;
         _variableToNumAttributes = variableToNumAttributes;
         _attributeVariableToDisjunctionTestPerProduction = attributeVariableToDisjunctionTestPerProduction;
@@ -567,6 +569,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             productionBuilders[1].append("0");
             productionBuilders[2].append("0");
             productionBuilders[3].append("0");
+            productionBuilders[4].append("0");
 
         } else {
             for (int i = 0; i < array_1.size(); i++) {
@@ -574,7 +577,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 String nextAttribute = array_2.get(i);
                 String nextValue = array_3.get(i);
                 String nextTemp = array_4.get(i);
-                int maxSize = Math.max(Math.max(Math.max(nextIdentifier.length(), nextAttribute.length()), nextValue.length()), nextTemp.length());
+                String nextAttributeTemp = attributeTemps.getFirst();
+                attributeTemps.addLast(attributeTemps.removeFirst());
+                int maxSize = Math.max(Math.max(Math.max(Math.max(nextIdentifier.length(), nextAttribute.length()), nextValue.length()), nextTemp.length()), nextAttributeTemp.length());
                 if (i > 0) {
                     for (StringBuilder nextStringBuilder : productionBuilders) {
                         nextStringBuilder.append(", ");
@@ -585,6 +590,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 productionBuilders[1].append(nextAttribute).append(getSpaces(maxSize - nextAttribute.length()));
                 productionBuilders[2].append(nextValue).append(getSpaces(maxSize - nextValue.length()));
                 productionBuilders[3].append(nextTemp).append(getSpaces(maxSize - nextTemp.length()));
+                productionBuilders[4].append(nextAttributeTemp).append(getSpaces(maxSize - nextAttributeTemp.length()));
             }
         }
         return count;
@@ -614,7 +620,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         StringBuilder attributeArray            = new StringBuilder("int productionAttributeArray[MAX_GLOBAL_SIZE]   = {");
         StringBuilder valueArray                = new StringBuilder("int productionValueArray[MAX_GLOBAL_SIZE]       = {");
         StringBuilder temporaryAndFunctionArray = new StringBuilder("int productionTempAndFuncArray[MAX_GLOBAL_SIZE] = {");
-        return new StringBuilder[]{operatorArray, attributeArray, valueArray, temporaryAndFunctionArray};
+        StringBuilder temporaryAttributeArray   = new StringBuilder("int productionAttributeTemp[MAX_GLOBAL_SIZE]    = {");
+        return new StringBuilder[]{operatorArray, attributeArray, valueArray, temporaryAndFunctionArray, temporaryAttributeArray};
     }
 
     private void getNextElement(String nextElement, LinkedList<String> nextArrayElements, int index, String productionArray) {
@@ -671,13 +678,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         StringBuilder currentTemplateDeclaration = new StringBuilder();
         int currentLatestNum = _latestNum;
         for (String dummyVariable : conditionSideVariablesToTemps.values()) {
-            currentTemplateDeclaration.append("const int ");
-            currentTemplateDeclaration.append(dummyVariable);
-            currentTemplateDeclaration.append(" = ");
-            currentTemplateDeclaration.append(currentLatestNum++ + ";\n");
+            addConstantToGlobals(currentTemplateDeclaration, dummyVariable, currentLatestNum++);
+        }
+        for (String dummyVariable : attributesToTemps.values()) {
+            addConstantToGlobals(currentTemplateDeclaration, dummyVariable, currentLatestNum++);
         }
 
-//        for (String productionVariable : _productionVariables.values()) {
+        //        for (String productionVariable : _productionVariables.values()) {
 //            currentTemplateDeclaration.append("int ");
 //            currentTemplateDeclaration.append(productionVariable);
 //            currentTemplateDeclaration.append(";\n");
@@ -834,6 +841,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         actionProductionAttributes = new LinkedList<>();
         actionProductionValues = new LinkedList<>();
         actionProductionFunctions = new LinkedList<>();
+        attributesToTemps = new HashMap<>();
+        attributeTemps = new LinkedList<>();
         _latestIndex = 0;
 
         String startStateID = getCounter();
@@ -1006,14 +1015,22 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     attrPath = dummyValue;
                 } else if (attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test() != null) {
                     attrPath = getVaribleFromConjunctive(attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test());
-                    if (attributeVariableToArrayName.get(attrPath) != null) {
-                        attrPath = attributeVariableToArrayName.get(attrPath);
+                    if (attributesToTemps.get(attrPath) == null) {
+                        String dummy = "dummy_state_" + SoarTranslator.simplifiedString(attrPath);
+                        attributesToTemps.put(attrPath, dummy);
                     }
+                    attributeTemps.add(attributesToTemps.get(attrPath));
+                    attrPath = attributeVariableToArrayName.get(attrPath);
+                } else if (attributesToTemps.get(attrPath) != null) {
+                    attrPath = attributesToTemps.get(attrPath);
                 } else {
                     attrPath = SoarTranslator.simplifiedString(attrPath);
                 }
                 conditionProductionIdentifiers.add(attrPath.equals("operator") ? "finalOp" : lastVariable);
                 conditionProductionAttributes.add(attrPath);
+                if (attributeTemps.size() < conditionProductionIdentifiers.size()) {
+                    attributeTemps.add("0");
+                }
 
                 String value;
 
@@ -1044,7 +1061,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                                 rightTerm = getText(relationAndRightTerm, "var");
                                 if (conditionSideVariablesToTemps.get(rightTerm) == null) {
                                     value = "nilAnything";
-                                    String withoutTempVariable = SoarTranslator.simplifiedString(localVariableDictionary.get(rightTerm));
+                                    String withoutTempVariable = SoarTranslator.simplifiedString(localVariableDictionary.get(rightTerm) + "_" + rightTerm);
                                     String dummyVariable = "dummy_" + withoutTempVariable;
                                     conditionSideVariablesToTemps.put(rightTerm, dummyVariable);
                                     conditionProductionTemp.add(dummyVariable);
@@ -1066,6 +1083,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                                     conditionProductionIdentifiers.add(_latestIndex, conditionProductionIdentifiers.removeLast());
                                     conditionProductionAttributes.add(_latestIndex, conditionProductionAttributes.removeLast());
                                     conditionProductionTemp.add(_latestIndex, conditionProductionTemp.removeLast());
+                                    attributeTemps.add(_latestIndex, attributeTemps.removeLast());
                                     _latestIndex++;
                                 } else {
                                     conditionProductionValues.add(value);
@@ -1077,6 +1095,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                                         conditionProductionAttributes.add(_latestIndex, "extraRestriction");
                                         conditionProductionValues.add(_latestIndex, variablesForRelations[i]);
                                         conditionProductionTemp.add(_latestIndex, relations[i]);
+                                        attributeTemps.add(_latestIndex, "0");
                                         _latestIndex++;
                                     }
                                 }
@@ -1280,11 +1299,17 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
 
         for (SoarParser.Attr_value_makeContext attrCtx : ctxs) {
-            String attribute = SoarTranslator.simplifiedString(attrCtx.variable_or_sym_constant(attrCtx.variable_or_sym_constant().size() - 1).getText());
+            String attribute = attrCtx.variable_or_sym_constant(attrCtx.variable_or_sym_constant().size() - 1).getText();
+            if (attributesToTemps.get(attribute) != null) {
+                attribute = attributesToTemps.get(attribute);
+            } else {
+                attribute = SoarTranslator.simplifiedString(attribute);
+            }
 
             for (SoarParser.Value_makeContext value_makeContext : attrCtx.value_make()) {
                 actionProductionIdentifiers.add(variable);
                 actionProductionAttributes.add(attribute);
+                attributeTemps.add("0");
 
                 Node rightSideElement = value_makeContext.accept(this);
                 String rightSide = determineAssignment(rightSideElement, localVariablePathsWithID);
@@ -1334,7 +1359,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (rightSideElement.getProperty("const") != null) {
                 actionProductionValues.add(getText(rightSideElement, "const"));
             } else if (rightSideElement.getProperty("expr") != null) {
-                actionProductionValues.add(SoarTranslator.simplifiedString(getText(rightSideElement, "firstValue")));
+                actionProductionValues.add(getText(rightSideElement, "firstValue"));
                 actionProductionFunctions.add(getText(rightSideElement, "expr"));
             } else if (rightSideElement.getProperty("pref") != null) {
                 if (getText(rightSideElement, "pref").equals("remove")) {
@@ -1404,12 +1429,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private String getVariableOrTemp(SoarParser.ValueContext ctx, Map<String, String> localDictionary) {
         StringBuilder variableOrTemp = new StringBuilder();
         if (ctx.variable() == null) {
-            variableOrTemp.append(ctx.constant().getText());
-        } else {
-            if (_productionVariables.get(ctx.getText()) != null) {
-                variableOrTemp.append("dummy_");
-            }
-            variableOrTemp.append(localDictionary.get(ctx.getText()));
+            variableOrTemp.append(SoarTranslator.simplifiedString(ctx.constant().getText()));
+        } else if (conditionSideVariablesToTemps.get(ctx.variable().getText()) != null) {
+            variableOrTemp.append(conditionSideVariablesToTemps.get(ctx.variable().getText()));
         }
         return variableOrTemp.toString();
     }
