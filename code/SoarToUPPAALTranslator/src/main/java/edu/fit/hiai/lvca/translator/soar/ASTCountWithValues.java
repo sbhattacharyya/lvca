@@ -21,8 +21,13 @@ public class ASTCountWithValues {
         values.add(headValue);
     }
 
-    public int getNumValues() { return numValues; }
-    public int getNumEdges() { return edges.size(); }
+    public LinkedList<String> getEdges() {
+        LinkedList<String> topEdges = new LinkedList<>();
+        for (Map.Entry<String, ASTCountWithValues> nextEdge : edges.entrySet()) {
+            topEdges.add(nextEdge.getKey());
+        }
+        return topEdges;
+    }
 
     public boolean containsValue (String value) { return values.contains(value); }
     public boolean containsEdge (String edge) { return edges.get(edge) != null; }

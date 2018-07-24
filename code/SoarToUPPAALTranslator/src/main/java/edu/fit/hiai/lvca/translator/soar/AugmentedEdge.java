@@ -4,6 +4,7 @@ package edu.fit.hiai.lvca.translator.soar;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Set;
 
 public class AugmentedEdge {
     private String name;
@@ -45,25 +46,26 @@ public class AugmentedEdge {
         return null;
     }
 
-    public void makeIDsEdge(HashSet<Integer> takenValues, Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables, LinkedList<String> variableNames) {
+    public void makeIDsEdge(HashSet<Integer> takenValues, Map<String, String> variablesToPathWithID, Map<String, Integer> variableIDToIndex, Map<String, String> variablesToPath, ProductionVariables actualVariables, LinkedList<String> variableNames, Map<String, Boolean> seenVariables) {
         for (AugmentedSymbolTree AST : values) {
             try {
                 takenValues.add(Integer.parseInt(AST.getName()));
             } catch(NumberFormatException e) {}
             String variablePath = variablesToPath.get(AST.getName());
-            if (variablePath != null && actualVariables.variablesContains(AST.getName())) {
+            if (variablePath != null && actualVariables.variablesContains(AST.getName()) && seenVariables.get(AST.getName()) == null) {
                 Integer variableID = variableIDToIndex.get(variablePath);
                 if (variableID == null) {
                     variableID = 1;
-                    variableIDToIndex.put(variablePath, variableID);
                 } else {
                     variableID++;
                 }
+                variableIDToIndex.put(variablePath, variableID);
                 String name = variablePath + "_" + variableID;
                 variablesToPathWithID.put(AST.getName(), name);
                 variableNames.add(name);
+                seenVariables.put(AST.getName(), true);
             }
-            AST.makeIDs(takenValues, variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables, variableNames);
+            AST.makeIDs(takenValues, variablesToPathWithID, variableIDToIndex, variablesToPath, actualVariables, variableNames, seenVariables);
         }
     }
 

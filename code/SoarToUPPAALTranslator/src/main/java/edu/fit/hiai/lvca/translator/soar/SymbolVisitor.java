@@ -351,7 +351,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         // Called for side effects
         for (SoarParser.Value_testContext value_testContext : ctx.value_test()) {
             SymbolTree child = value_testContext.accept(this);
-            if (child.DFS("relation") != null) {
+            if (child != null && child.DFS("relation") != null) {
                 SymbolTree variable = child.DFS("variable").getChildren().get(0);
                 SymbolTree relations = child.DFS("relation");
                 if (productionSource != null) {

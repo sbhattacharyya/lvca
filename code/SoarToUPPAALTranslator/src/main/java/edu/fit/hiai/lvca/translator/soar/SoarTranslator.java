@@ -99,8 +99,9 @@ public class SoarTranslator
             Map<String, AugmentedSymbolTree> currentAttributesAndValues = attributesAndValuesPerProduction.get(individualProduction);
             Map<String, String> currentVariables = variablesPerProductionContext.get(individualProduction);
             ProductionVariables actualVariables = actualVariablesPerProduction.get(individualProduction);
+            Map<String, Boolean> seenVariables = new HashMap<>();
             for (String individualVariable : currentAttributesAndValues.keySet()) {
-                currentAttributesAndValues.get(individualVariable).makeIDs(takenValues, newVariablesMap, variableIDToIndex, currentVariables, actualVariables, variableNames);
+                currentAttributesAndValues.get(individualVariable).makeIDs(takenValues, newVariablesMap, variableIDToIndex, currentVariables, actualVariables, variableNames, seenVariables);
                 if (currentVariables.get(individualVariable).equals("state")) {
                     newVariablesMap.put(individualVariable, "state_-1");
                 }
@@ -301,12 +302,12 @@ public class SoarTranslator
         LinkedList<UppaalAttributeValueTriad> AVCollection = new LinkedList<>();
         collectAttributeTriads(AVCollection, condensedAttributesValueCount, attributesToIDs);
 
-        Map<String, Integer> variableToNumAttributes = new HashMap<>();
+        Map<String, LinkedList<String>> variableToAttributes = new HashMap<>();
         for (String variable : condensedAttributesValueCount.keySet()) {
-            variableToNumAttributes.put(variable, condensedAttributesValueCount.get(variable).getNumEdges());
+            variableToAttributes.put(variable, condensedAttributesValueCount.get(variable).getEdges());
         }
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, maxQuerySize, productionToOSupported, variableToNumAttributes, attributeVariableToDisjunctionTestPerProduction, attributeVariableToArrayNamePerProduction));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, maxQuerySize, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction, attributeVariableToArrayNamePerProduction));
     }
 
     /**
