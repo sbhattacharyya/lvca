@@ -459,6 +459,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         String arrayName = "array_" + latestIndex;
         if (!contains) {
             arrayNameToDisjunctionTest.put(arrayName, notAllBut);
+            currentMaxQuerySize++;
         }
         return new SymbolTree(arrayName);
     }
@@ -647,6 +648,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     @Override
     public SymbolTree visitFunc_call(SoarParser.Func_callContext ctx) {
+        currentMaxQuerySize++;
         if (!ctx.func_name().getText().equals("halt")) {
             return new SymbolTree("ADD_NODE");
         } else {
