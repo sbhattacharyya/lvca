@@ -460,16 +460,40 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         newSwitch.append(" else {\n").append("\t\treturn -1;\n").append("\t}\n");
         vars.append(newSwitch).append("}\n").append("\n");
 
-        vars.append("int getOperatorFromID(int id) {\n");
+        getOperatorToIDAndBack(actualOperatorCollection, "getOperatorFromID(int id)", "id", true, vars);
 
-        newSwitch = new StringBuilder();
+        getOperatorToIDAndBack(actualOperatorCollection, "getIDFromOperator(int operator)", "operator", false, vars);
+
+        if (noneButSwitch != null) {
+            vars.append(noneButSwitch);
+        }
+
+        ourDocument.setProperty("declaration", vars.toString());
+    }
+
+    private void getOperatorToIDAndBack(LinkedList<String> actualOperatorCollection, String functionName, String ifPart, boolean operatorFromID, StringBuilder currentDeclaration) {
+        currentDeclaration.append("int ").append(functionName).append(" {\n");
+
+        StringBuilder newSwitch = new StringBuilder();
         for (String nextOperator : actualOperatorCollection) {
             newSwitch.append("\t");
             if (newSwitch.length() > 1) {
                 newSwitch.append("} else ");
             }
             int operatorIndex = Integer.parseInt(nextOperator.substring(nextOperator.lastIndexOf('_') + 1)) - 1;
-            newSwitch.append("if (id == ").append(operatorIndex).append(") {\n\t\treturn ").append(nextOperator).append(";\n");
+            newSwitch.append("if (").append(ifPart).append(" == ");
+            if (operatorFromID) {
+                newSwitch.append(operatorIndex);
+            } else {
+                newSwitch.append(nextOperator);
+            }
+            newSwitch.append(") {\n\t\treturn ");
+            if (operatorFromID) {
+                newSwitch.append(nextOperator);
+            } else {
+                newSwitch.append(operatorIndex);
+            }
+            newSwitch.append(";\n");
         }
         if (newSwitch.length() > 0) {
             newSwitch.append("\t} else {\n\t\treturn -1;\n").append("\t}\n");
@@ -477,13 +501,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             newSwitch.append("\treturn -1;\n");
         }
         newSwitch.append("}\n").append("\n");
-        vars.append(newSwitch);
-
-        if (noneButSwitch != null) {
-            vars.append(noneButSwitch);
-        }
-
-        ourDocument.setProperty("declaration", vars.toString());
+        currentDeclaration.append(newSwitch);
     }
 
     private void getSystemElement(Element attributeValuePairs) {
@@ -554,12 +572,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdge(currentTemplate, lastLocation, lastLocationTemp, null, null, synchronization, new Integer[]{xTextLocation, lastLocationCoords[1] - (getNumLines(stackGuard, " &&") + 1)*SIZE_OF_TEXT}, stackGuard, new Integer[]{xTextLocation, lastLocationCoords[1] - getNumLines(stackGuard, " &&")*SIZE_OF_TEXT}, assignment, new Integer[]{xTextLocation, lastLocationCoords[1] + 8});
         lastLocationCoords[0] = xTempCoords;
         if (startLocation != null) {
-            kickBackToProvidedLocation(currentTemplate, lastLocationTemp, lastLocationCoords, startLocation, "globalDoesContain == -1", null, false);
+            kickBackToProvidedLocation(currentTemplate, lastLocationTemp, lastLocationCoords, startLocation, "globalDoesContain == -1", null, null, false, null);
         }
         return lastLocationTemp;
     }
 
-    private void kickBackToProvidedLocation(Template currentTemplate, Location fromLocation, int[] fromLocationCoords, Location toLocation, String guard, Location kickBackReference, boolean isRetraction) {
+    private void kickBackToProvidedLocation(Template currentTemplate, Location fromLocation, int[] fromLocationCoords, Location toLocation, String guard, Integer kickBackIndex, Location kickBackReference, boolean isRetraction, Map<Integer, StringBuilder> indexToKickBackCommands) {
         Integer[] textLocation = new Integer[2];
         Integer[] nails;
         String assignment;
@@ -587,6 +605,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             assignment = "";
             if (kickBackReference == null) {
                 assignment = assignment + "lookAheadArray = lookAheadDefault,\nremoveStackCondition()";
+            } else {
+                assignment = assignment + indexToKickBackCommands.get(kickBackIndex - 1).toString();
             }
         }
         makeEdgeWithNails(currentTemplate, fromLocation, toLocation, null, null, null, null, guard, textLocation, assignment, new Integer[]{textLocation[0], textLocation[1] + 2*SIZE_OF_TEXT}, nails);
@@ -602,15 +622,15 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return lastLocation;
     }
 
-    private Location addVerticalLocation(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String guard, StringBuilder[] conditionsOrAssignments, Location kickBackLocation, int[] kickBackIndexes, Location[] kickBackReferences, boolean isRetraction) {
+    private Location addVerticalLocation(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String guard, StringBuilder[] conditionsOrAssignments, Location kickBackLocation, int[] kickBackIndexes, Location[] kickBackReferences, boolean isRetraction, Map<Integer, StringBuilder> indexToKickBackCommands) {
         String[] guardAndInverseGuard = getGuards(guard);
         for(int i = 1; i < conditionsOrAssignments.length; i++) {
             lastLocation = addSingleVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, guardAndInverseGuard[0], conditionsOrAssignments[i].toString());
             if (guardAndInverseGuard[1] != null) {
                 if (isRetraction) {
-                    kickBackToProvidedLocation(currentTemplate, lastLocation, lastLocationCoords, kickBackLocation, guardAndInverseGuard[1], null, isRetraction);
+                    kickBackToProvidedLocation(currentTemplate, lastLocation, lastLocationCoords, kickBackLocation, guardAndInverseGuard[1], null, null, isRetraction, null);
                 } else {
-                    kickBackToProvidedLocation(currentTemplate, lastLocation, lastLocationCoords, kickBackLocation, guardAndInverseGuard[1], kickBackIndexes[i] == -1 ? null : kickBackReferences[kickBackIndexes[i]], isRetraction);
+                    kickBackToProvidedLocation(currentTemplate, lastLocation, lastLocationCoords, kickBackLocation, guardAndInverseGuard[1], kickBackIndexes[i], kickBackIndexes[i] == -1 ? null : kickBackReferences[kickBackIndexes[i]], isRetraction, indexToKickBackCommands);
                     kickBackReferences[i+1] = lastLocation;
                 }
             }
@@ -791,24 +811,27 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     private void addNextElement(String variable, String nextElement, StringBuilder conditionOrAssignment, boolean commaNext) {
-        conditionOrAssignment.append(variable).append(" = ");
-        if (!nextElement.equals("0")) {
-            conditionOrAssignment.append(nextElement);
-        } else {
-            conditionOrAssignment.append("0");
-        }
-        if (commaNext) {
-            conditionOrAssignment.append(",\n");
+        if (conditionOrAssignment != null) {
+            conditionOrAssignment.append(variable).append(" = ");
+            if (!nextElement.equals("0")) {
+                conditionOrAssignment.append(nextElement);
+            } else {
+                conditionOrAssignment.append("0");
+            }
+            if (commaNext) {
+                conditionOrAssignment.append(",\n");
+            }
         }
     }
 
-    private StringBuilder[][] getConditionOrAssignment(LinkedList<String> productionIdentifiers, LinkedList<String> productionAttributes, LinkedList<String> productionValues, LinkedList<String> productionValueTemps, LinkedList<String> productionAttributeTemps, Map<String, Integer> conditionTempToIndex, Map<String, Integer> attributeTempToIndex, boolean isAssignment) {
+    private StringBuilder[][] getConditionOrAssignment(LinkedList<String> productionIdentifiers, LinkedList<String> productionAttributes, LinkedList<String> productionValues, LinkedList<String> productionValueTemps, LinkedList<String> productionAttributeTemps, Map<String, Integer> conditionTempToIndex, Map<String, Integer> attributeTempToIndex, boolean isAssignment, Map<Integer, StringBuilder> indexToKickBackCommands) {
         int size = productionIdentifiers.size();
         for (String nextPossibleFunction : productionValueTemps) {
             if (nextPossibleFunction.equals("addFunction") || nextPossibleFunction.equals("subtractFunction")) {
                 size--;
             }
         }
+        StringBuilder nextKickBackCommands = null;
         StringBuilder[] conditionsOrAssignments = new StringBuilder[size];
         StringBuilder[] inverseConditionOrAssignments = new StringBuilder[size];
         StringBuilder tempFromLast = new StringBuilder();
@@ -822,6 +845,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
             conditionsOrAssignments[builderIndex] = new StringBuilder();
             inverseConditionOrAssignments[builderIndex] = new StringBuilder();
+            if (indexToKickBackCommands != null) {
+                nextKickBackCommands = new StringBuilder();
+                indexToKickBackCommands.put(i, nextKickBackCommands);
+            }
             String nextIdentifier = productionIdentifiers.get(i);
             String nextAttribute = productionAttributes.get(i);
             String nextValue = productionValues.get(i);
@@ -837,7 +864,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (nextValueTemp.startsWith("dummy")) {
                 tempFromLast.append(nextValueTemp).append(" = ");
                 if (nextIdentifier.equals("finalOp")) {
-                    tempFromLast.append("getOperatorFromID(globalValue)");
+                    tempFromLast.append("getOperatorFromID(globalValue - 1)");
                 } else {
                     tempFromLast.append("globalValue");
                 }
@@ -854,6 +881,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 }
                 addNextElement("globalValue", "\nproductions[productionIndexTemp]." + savedArray + "[" + index + "]", inverseConditionOrAssignments[builderIndex], true);
                 addNextElement("valueFunction", "0", conditionsOrAssignments[builderIndex], true);
+                addNextElement("valueFunction", "0", nextKickBackCommands, true);
             } else {
                 if (isAssignment) {
                     addNextElement("valueFunction", "remove", inverseConditionOrAssignments[builderIndex], true);
@@ -861,6 +889,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     addNextElement("valueFunction", nextValueTemp, inverseConditionOrAssignments[builderIndex], true);
                 }
                 addNextElement("valueFunction", nextValueTemp, conditionsOrAssignments[builderIndex], true);
+                addNextElement("valueFunction", nextValueTemp, nextKickBackCommands, true);
                 if (nextValueTemp.equals("addFunction") || nextValueTemp.equals("subtractFunction")) {
                     skipNext = true;
                     nextAttributeTemp = productionValues.get(i + 1);
@@ -870,12 +899,15 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (nextAttributeTemp != null) {
                 addNextElement("attributeFunction", nextAttributeTemp, conditionsOrAssignments[builderIndex], true);
                 addNextElement("attributeFunction", nextAttributeTemp, inverseConditionOrAssignments[builderIndex], true);
+                addNextElement("attributeFunction", nextAttributeTemp, nextKickBackCommands, true);
             } else {
                 addNextElement("attributeFunction", "0", conditionsOrAssignments[builderIndex], true);
                 addNextElement("attributeFunction", "0", inverseConditionOrAssignments[builderIndex], true);
+                addNextElement("attributeFunction", "0", nextKickBackCommands, true);
             }
             addNextElement("globalIdentifier", nextIdentifier, conditionsOrAssignments[builderIndex], true);
             addNextElement("globalIdentifier", nextIdentifier, inverseConditionOrAssignments[builderIndex], true);
+            addNextElement("globalIdentifier", nextIdentifier, nextKickBackCommands, true);
             if (nextAttribute.startsWith("noneBut")) {
                 if (tempFromLast.length() > 0) {
                     tempFromLast.append(",\n");
@@ -884,10 +916,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
             addNextElement("globalAttribute", nextAttribute, conditionsOrAssignments[builderIndex], true);
             addNextElement("globalAttribute", nextAttribute, inverseConditionOrAssignments[builderIndex], false);
+            addNextElement("globalAttribute", nextAttribute, nextKickBackCommands, true);
             addNextElement("globalValue", nextValue, conditionsOrAssignments[builderIndex], false);
+            addNextElement("globalValue", nextValue, nextKickBackCommands, false);
             if (!isAssignment) {
                 conditionsOrAssignments[builderIndex].append(",\nlookAheadIndex = ").append(i);
                 conditionsOrAssignments[builderIndex].append(",\nglobalDoesContain = 0");
+                if (nextKickBackCommands != null) {
+                    nextKickBackCommands.append(",\nlookAheadIndex = ").append(i);
+                    nextKickBackCommands.append(",\nglobalDoesContain = 0");
+                }
                 inverseConditionOrAssignments[builderIndex].append(",\nglobalDoesContain = 0");
             }
             builderIndex++;
@@ -907,8 +945,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         int index = 0;
         for (String nextValue : conditionProductionValues) {
             kickBackIndexes[index] = lastNilAnything;
-            if (nextValue.equals("nilAnything") || nextValue.startsWith("noneBut")) {
-                lastNilAnything = index;
+            if (nextValue.equals("nilAnything") || conditionProductionAttributes.get(index).startsWith("noneBut")) {
+                lastNilAnything = index + 1;
             }
             index++;
         }
@@ -973,8 +1011,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         setLastLocationCoords(lastLocationCoords);
         Location lastLocation;
 
-        StringBuilder[][] conditions = getConditionOrAssignment(conditionProductionIdentifiers, conditionProductionAttributes, conditionProductionValues, conditionProductionTemp, attributeTemps, conditionTempToIndex, attributeTempToIndex, false);
-        StringBuilder[][] assignments = getConditionOrAssignment(actionProductionIdentifiers, actionProductionAttributes, actionProductionValues, actionProductionFunctions, null, conditionTempToIndex, attributeTempToIndex, true);
+        Map<Integer, StringBuilder> indexToKickBackCommands = new HashMap<>();
+        StringBuilder[][] conditions = getConditionOrAssignment(conditionProductionIdentifiers, conditionProductionAttributes, conditionProductionValues, conditionProductionTemp, attributeTemps, conditionTempToIndex, attributeTempToIndex, false, indexToKickBackCommands);
+        StringBuilder[][] assignments = getConditionOrAssignment(actionProductionIdentifiers, actionProductionAttributes, actionProductionValues, actionProductionFunctions, null, conditionTempToIndex, attributeTempToIndex, true, null);
         for (StringBuilder[] nextBuilder : assignments) {
             for (StringBuilder nextAssignment : nextBuilder) {
                 nextAssignment.append(",\naddOperator = true");
@@ -1006,7 +1045,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
                 lastLocationCoords[1] += extraShift;
 
-                lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "globalDoesContain", conditions[1], runRetractAssignments,null, null, true);
+                lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "globalDoesContain", conditions[1], runRetractAssignments,null, null, true, null);
 
                 assignment = "productionIndexTemp++";
                 lastLocationCoords[0] -= 150;
@@ -1023,15 +1062,15 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 extraShift = ((getNumLines(assignment, ",") + 1)*SIZE_OF_TEXT);
 
                 lastLocationCoords[1] += extraShift;
-                lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "addOperator", assignments[1], runRetractLocation,null, null, true);
+                lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "addOperator", assignments[1], runRetractLocation,null, null, true, null);
 
                 lastLocation = addSingleVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "!addOperator", "removeOperator = true,\nglobalIndex = 0,\ncurrentNumAttributes =\ngetNumAttributes(nestedCheckArray[0])");
 
-                assignment = "productionIndexTemp--";
+                assignment = "productionIndex--";
                 goBackToProvidedLocation(currentTemplate, lastLocation, runRetractLocation, lastLocationCoords, "!removeOperator &&\ncurrentNumAttributes == 0", assignment, true);
             } else {
                 int xTextLocation = lastLocationCoords[0] - 370;
-                makeEdgeWithNails(currentTemplate, startLocation, startLocation, null, null, "Run_Rule?", new Integer[]{xTextLocation, lastLocationCoords[1] - SIZE_OF_TEXT*3}, "!productionFired &&\nstackRetractIndex == -1", new Integer[]{xTextLocation, lastLocationCoords[1] - SIZE_OF_TEXT*2}, "currentNumFiringPerCycle = 0", new Integer[]{xTextLocation, lastLocationCoords[1] + 10}, new Integer[]{xTextLocation, lastLocationCoords[1]});
+                makeEdgeWithNails(currentTemplate, startLocation, startLocation, null, null, "Run_Rule?", new Integer[]{xTextLocation, lastLocationCoords[1] - SIZE_OF_TEXT*3}, "!productionFired &&\nisRetracting", new Integer[]{xTextLocation, lastLocationCoords[1] - SIZE_OF_TEXT*2}, "currentNumFiringPerCycle = 0", new Integer[]{xTextLocation, lastLocationCoords[1] + 10}, new Integer[]{xTextLocation, lastLocationCoords[1]});
             }
         }
 
@@ -1048,19 +1087,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         lastLocation = addHorizontalLocation(currentTemplate, lastLocation, lastLocationCoords, null, null, "stackCondition[stackConditionIndex] == " + _templateIndex + " &&\n!addOperator", conditions[0][0].toString() + ",\nglobalIndex = 0", false, startLocation);
 
         kickBackReferences[1] = lastLocation;
-        lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "globalDoesContain", conditions[0], startLocation, kickBackIndexes, kickBackReferences, false);
+        lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "globalDoesContain", conditions[0], startLocation, kickBackIndexes, kickBackReferences, false, indexToKickBackCommands);
 
-        lastLocation = goToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Assignment", "globalDoesContain == 1", "removeStackCondition(),\naddToStackAction(" + _templateIndex + "),\nproductionFired = true", false);
+        lastLocation = goToNextStage(currentTemplate, lastLocation, lastLocationCoords, "Run_Assignment", "globalDoesContain == 1", "removeStackCondition(),\naddToStackAction(" + _templateIndex + "),\nproductionFired = true,\nlookAheadArray = lookAheadDefault", false);
 
         goBackToProvidedLocation(currentTemplate, lastLocation, startLocation, lastLocationCoords, null, "halt", false);
 
         String guard;
         if (assignments[0].length == 0) {
-            guard = "stackConditionIndex == -1 &&\nstackActionIndex == " + _templateIndex;
+            guard = "stackConditionIndex == -1 &&\nstackAction[stackActionIndex] == " + _templateIndex;
         } else {
             lastLocation = addHorizontalLocation(currentTemplate, lastLocation, lastLocationCoords, null, null, "stackConditionIndex == -1 &&\nstackAction[stackActionIndex] == " + _templateIndex, assignments[0][0].toString(),false, null);
             if (assignments[0].length != 1) {
-                lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "addOperator", assignments[0], null, null, null, false);
+                lastLocation = addVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, "addOperator", assignments[0], null, null, null, false, null);
             }
             guard = "!addOperator";
         }
@@ -1476,10 +1515,19 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return operatorCollection.stream().collect(Collectors.joining(",\n"));
     }
 
+    private String getOperatorIndex(String index) {
+        try {
+            Integer.parseInt(index);
+            return index;
+        } catch(NumberFormatException e) {
+            return "getIDFromOperator(" + index + ")";
+        }
+    }
+
     private String operatorBaseString(String index, String parameter) {
         StringBuilder returnString = new StringBuilder();
         returnString.append("operators[");
-        returnString.append(index);
+        returnString.append(getOperatorIndex(index));
         returnString.append("].operator.");
 
         returnString.append(parameter);
@@ -1553,6 +1601,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     } else if (getText(rightSideElement, "pref").equals("binary")) {
                         String binaryPref = getText(rightSideElement, "binaryPref");
                         String thatValueID = getIndexFromID(getText(rightSideElement, "secondValue"), localVariablePathsWithID);
+                        operatorIndex = getOperatorIndex(operatorIndex);
+                        thatValueID = getOperatorIndex(thatValueID);
                         if (binaryPref.equals("isBetterTo")) {
                             rightSide = functionCallWithTwoIDs("addBetterTo", operatorIndex, thatValueID);
                         } else if (binaryPref.equals("isUnaryOrBinaryIndifferentTo")) {
@@ -2114,7 +2164,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "}\n" +
                 "\n" +
                 "void nextNumBut() {\n" +
-                "\tint nextIndex = lookAheadArray[lookAheadIndex] + 1;\n" +
+                "\tint nextIndex = lookAheadArray[lookAheadIndex];\n" +
                 "\tint nextElement = getNumButNextElement(globalAttribute, nextIndex);\n" +
                 "\tint i;\n" +
                 "\tif (nextElement == -1) {\n" +
@@ -2122,7 +2172,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "\t\tglobalDoesContain = -1;\n" +
                 "\t} else {\n" +
                 "\t\tattributeFunction = nextElement;\n" +
-                "\t\tlookAheadArray[lookAheadIndex] = nextIndex;\n" +
+                "\t\tlookAheadArray[lookAheadIndex] = nextIndex + 1;\n" +
                 "\t\tglobalDoesContain = 1;\n" +
                 "\t}\n" +
                 "}\n" +
