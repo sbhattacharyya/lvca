@@ -213,7 +213,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 noneButSwitch.append("} else ");
             }
             noneButSwitch.append("if (numBut == ").append(disjunctionMap.getKey()).append(") {\n");
-            noneButSwitch.append("\t\tif (index > ").append(disjunctionMap.getKey() + "_array_size").append(") {\n");
+            noneButSwitch.append("\t\tif (index >= ").append(disjunctionMap.getKey() + "_array_size").append(") {\n");
             noneButSwitch.append("\t\t\treturn -1;\n");
             noneButSwitch.append("\t\t} else {\n");
             noneButSwitch.append("\t\t\treturn ").append(disjunctionMap.getKey() + "_array[index]").append(";\n");
@@ -1139,6 +1139,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     _productionVariables.put(dummyVariable, newTempVariable);
                     conditionSideVariablesToTemps.put(dummyVariable, dummyVariable);
                     lastVariable = dummyVariable;
+                    attributeTemps.add("0");
                 }
 
                 String attrPath = attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).getText();
@@ -1460,6 +1461,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     actionProductionAttributes.add("0");
                     actionProductionValues.add(getText(rightSideElement, "secondValue"));
                     actionProductionFunctions.add("0");
+                    attributeTemps.add("0");
                 }
 
                 if (rightSide != null) {
@@ -1510,19 +1512,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private String determineAssignment(Node rightSideElement, Map<String, String> localVariablePathsWithID) {
         String rightSide = null;
         if (rightSideElement != null) {
-            if (rightSideElement.getProperty("const") != null) {
-                actionProductionValues.add(getText(rightSideElement, "const"));
-            } else if (rightSideElement.getProperty("expr") != null) {
+            if (rightSideElement.getProperty("expr") != null) {
                 actionProductionValues.add(getText(rightSideElement, "firstValue"));
                 actionProductionFunctions.add(getText(rightSideElement, "expr"));
             } else if (rightSideElement.getProperty("pref") != null) {
                 if (getText(rightSideElement, "pref").equals("remove")) {
-                    String rightSideVar = getText(rightSideElement, "var");
-                    String variable = conditionSideVariablesToTemps.get(rightSideVar);
-                    if (variable == null) {
-                        variable = getVariable(rightSideVar, localVariablePathsWithID);
+                    String rightSideVarOrConst = getText(rightSideElement, "constVarExpr");
+                    String variableOrConst;
+                    if (rightSideVarOrConst.equals("const")) {
+                        variableOrConst = getText(rightSideElement, "const");
+                    } else {
+                        rightSideVarOrConst = getText(rightSideElement, "var");
+                        variableOrConst = conditionSideVariablesToTemps.get(rightSideVarOrConst);
+                        if (variableOrConst == null) {
+                            variableOrConst = getVariable(rightSideVarOrConst, localVariablePathsWithID);
+                        }
                     }
-                    actionProductionValues.add(variable);
+                    actionProductionValues.add(variableOrConst);
                     actionProductionFunctions.add("remove");
                     shiftLists();
                 } else {
@@ -1564,6 +1570,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         }
                     }
                 }
+            } else if (rightSideElement.getProperty("const") != null) {
+                actionProductionValues.add(getText(rightSideElement, "const"));
             } else if (rightSideElement.getProperty("var") != null) {
                 String rightSideVar = getText(rightSideElement, "var");
                 String variable = conditionSideVariablesToTemps.get(rightSideVar);
@@ -1635,7 +1643,18 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     @Override
     public Node visitValue(SoarParser.ValueContext ctx) {
-        return ctx.children.get(0).accept(this);
+        Node returnNode = ctx.children.get(0).accept(this);
+        String property;
+        if (ctx.constant() != null) {
+            property = "const";
+        } else if (ctx.variable() != null) {
+            property = "var";
+        } else {
+            property = "expr";
+        }
+        returnNode.setProperty("constVarExpr", property);
+        return returnNode;
+
     }
 
     @Override
@@ -2090,7 +2109,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         AVUtilityTemplate.setProperty("declaration",
                 "void checkCondition() {\n" +
                 "\tbool conditionSatisfied = false;\n" +
-                "\tif (valueFunction == isNotEqualTo && globalIdentifier == globalValue) {\n" +
+                "\tif (tempOrFuncArray[globalIndex] == isNotEqualTo && globalIdentifier != globalValue) {\n" +
                 "\t\tconditionSatisfied = true;\n" +
                 "\t} else if (valueFunction == isGreaterThan && globalIdentifier > globalValue) {\n" +
                 "\t\tconditionSatisfied = true;\n" +
@@ -2293,7 +2312,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         "void removeBest() {\n" +
                         "\tint i = 0;\n" +
                         "\twhile (i < N && acceptable[i] != 0) {\n" +
-                        "\t\tif (operators[acceptable[i]-1].operator.isBest) {\n" +
+                        "\t\tif (!operators[acceptable[i]-1].operator.isBest) {\n" +
                         "\t\t\tremove(i, acceptable);\n" +
                         "\t\t} else {\n" +
                         "\t\t\ti++;\n" +
