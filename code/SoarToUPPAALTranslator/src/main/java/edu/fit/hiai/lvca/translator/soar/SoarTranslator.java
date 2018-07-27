@@ -308,7 +308,7 @@ public class SoarTranslator
             variableToAttributes.put(variable, condensedAttributesValueCount.get(variable).getEdges());
         }
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, maxQuerySize, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction, attributeVariableToArrayNamePerProduction, productionToProductionSize));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, maxQuerySize, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction, attributeVariableToArrayNamePerProduction));
     }
 
     /**
