@@ -54,6 +54,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     private Map<String, String> attributeVariableToArrayName;
     private Map<String, Map<String, String>> attributeVariableToArrayNamePerProduction = new HashMap<>();
     private boolean onAttribute;
+    private Map<String, Integer> productionToProductionSize = new HashMap<>();
 
     /**
      * Entry point for parsing, get all literal strings, values, and working memory locations used.
@@ -115,6 +116,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
     public Map<String, Map<String, String>> getAttributeVariableToArrayName() { return attributeVariableToArrayNamePerProduction; }
 
+    public Map<String, Integer> getProductionToProductionSize() { return productionToProductionSize; }
+
     /**
      * Update the global dictionary of (Soar Production) -> (Variable) -> (Working Memory Path)
      * The global dictionary keeps track of all Soar variable associations
@@ -148,7 +151,12 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         currentMaxQuerySize = 0;
         ctx.condition_side().accept(this);
+        int temp = currentMaxQuerySize;
         ctx.action_side().accept(this);
+        if (currentMaxQuerySize == temp) {
+            currentMaxQuerySize++;      //always at least one assignment for the extra zero
+        }
+        productionToProductionSize.put(ctx.sym_constant().getText(), currentMaxQuerySize);
         maxQuerySize = Math.max(maxQuerySize, currentMaxQuerySize);
 
         // globalVariableDictionary: production name -> variable id -> variable path
@@ -459,8 +467,8 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         String arrayName = "array_" + latestIndex;
         if (!contains) {
             arrayNameToDisjunctionTest.put(arrayName, notAllBut);
-            currentMaxQuerySize++;
         }
+        currentMaxQuerySize++;
         return new SymbolTree(arrayName);
     }
 
@@ -486,6 +494,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     public SymbolTree visitRelation(SoarParser.RelationContext ctx)
     {
         String relationText = UtilityForVisitors.relationToText(ctx.getText());
+        currentMaxQuerySize++;
         SymbolTree returnTree;
         if (relationText != null) {
             returnTree = new SymbolTree(relationText);
@@ -690,17 +699,18 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
 
         nestedVariableNames.clear();
         for (SoarParser.Variable_or_sym_constantContext variable_or_sym_constantContext : ctx.variable_or_sym_constant()) {
+            currentMaxQuerySize++;
+
             if (variable_or_sym_constantContext.sym_constant() != null) {
                 stringSymbols.add(variable_or_sym_constantContext.getText());
             }
             for (SoarParser.Value_makeContext value_makeContext : ctx.value_make()) {
-                currentMaxQuerySize++;
-                if (!isProductionOSupported && value_makeContext.value_pref_clause().size() == 0 && value_makeContext.value_pref_binary_value() == null) {
-                    currentMaxQuerySize++;
+                if (isProductionOSupported && (value_makeContext.value_pref_clause().size() > 0 || value_makeContext.value_pref_binary_value() != null)) {
+                    currentMaxQuerySize--;
                 }
-                if (value_makeContext.value().func_call() != null) {
-                    currentMaxQuerySize++;
-                }
+//                if (value_makeContext.value().func_call() != null) {
+//                    currentMaxQuerySize++;
+//                }
                 AugmentedSymbolTree newestValue = currentBranchInAttributesAndValues.findAugmentedTreeTop(value_makeContext.value().getText());
                 if (newestValue == null) {
                     newestValue = currentBranchInAttributesAndValues.addSingleValue(value_makeContext.value().getText());
@@ -711,6 +721,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
                 }
                 if (!variable_or_sym_constantContext.getText().equals("operator") && rightHandTree.getSubtreeNoError("isRejected") != null) {
                     newestValue.setName("$" + newestValue.getName());
+                    currentMaxQuerySize++;
                 } else if (variable_or_sym_constantContext.getText().equals("operator")) {
                     operatorCount++;
                 }
