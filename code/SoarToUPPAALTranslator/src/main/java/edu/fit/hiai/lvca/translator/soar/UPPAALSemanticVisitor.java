@@ -199,7 +199,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         for (Map.Entry<String, String[]> disjunctionMap : _disjunctionArrayNameToArray.entrySet()) {
             max = Math.max(max, disjunctionMap.getValue().length);
             addConstantToGlobals(globalVariables, disjunctionMap.getKey(), index--);
-            globalVariables.append("int ").append(disjunctionMap.getKey()).append("_array[").append(disjunctionMap.getValue().length).append("] = {");
+            globalVariables.append("const int ").append(disjunctionMap.getKey()).append("_array[").append(disjunctionMap.getValue().length).append("] = {");
             for (int i = 0; i< disjunctionMap.getValue().length; i++) {
                 if (i != 0) {
                     globalVariables.append(", ");
@@ -1084,13 +1084,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     lookIndex = possibleIndex + "operators[".length();
                     int endIndex = operatorAssignments.indexOf("]", lookIndex);
                     String nextIndex = operatorAssignments.substring(lookIndex, endIndex);
-//                    try {
-//                        Integer.parseInt(nextIndex);
-//                    } catch(NumberFormatException e) {
-//                        int newLookIndex = operatorAssignments.indexOf("(", lookIndex) + 1;
-//                        int newEndIndex = operatorAssignments.indexOf(")", newLookIndex);
-//                        nextIndex = operatorAssignments.substring(newLookIndex, newEndIndex);
-//                    }
                     lookIndex = endIndex;
                     operatorIndexes.add(nextIndex);
                 }
@@ -1208,7 +1201,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             }
             guard = "!addOperator";
         }
-        goBackToStartFromAssignment(currentTemplate, lastLocation, startLocation, lastLocationCoords, operatorAssignments, needsRetraction, guard);
+        if (!halt) {
+            goBackToStartFromAssignment(currentTemplate, lastLocation, startLocation, lastLocationCoords, operatorAssignments, needsRetraction, guard);
+        } else {
+            goBackToProvidedLocation(currentTemplate, lastLocation, startLocation, lastLocationCoords, null, "Halt!", false);
+        }
 
         _templateIndex++;
         _maxConditionSize = Math.max(_maxConditionSize, conditionProductionIdentifiers.size());
