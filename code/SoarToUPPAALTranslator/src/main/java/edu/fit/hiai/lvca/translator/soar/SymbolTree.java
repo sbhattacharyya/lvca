@@ -4,7 +4,7 @@ import java.util.*;
 
 /**
  * Created by mstafford on 6/17/16.
- *
+ * Updated by Daniel Griessler during Summer 2018
  * Designed to capture the identifiers and hierarchy of a Soar agent
  */
 public class SymbolTree
@@ -12,21 +12,30 @@ public class SymbolTree
     final String name;
     private final List<SymbolTree> children;
 
-    SymbolTree(String name)
-    {
+    /**
+     * Creates a new SymbolTree with the provided name
+     * @param name Name of the new SymbolTree
+     */
+    SymbolTree(String name) {
         this.name = name;
         children = new LinkedList<>();
     }
 
+    /**
+     * Used to check if this a leaf like on a graph
+     * @return If the SymbolTree has any children
+     */
     public boolean isLeaf()
     {
         return children.size() == 0;
     }
 
-    void addChild(SymbolTree childTree)
-    {
-        if (children.stream().noneMatch(c -> c.name.equals(childTree.name)))
-        {
+    /**
+     * Adds the provided SymbolTree to our list of children as long as we don't have a child with that name already
+     * @param childTree Tree that will be added as the new child
+     */
+    void addChild(SymbolTree childTree) {
+        if (children.stream().noneMatch(c -> c.name.equals(childTree.name))) {
             children.add(childTree);
         }
 
@@ -34,38 +43,31 @@ public class SymbolTree
 
     /**
      * Conduct a depth-first search for the tree that has the given name, return that subtree.
+     * Throws a NoSuchElementException if it can't be found
      *
-     * @param treeName
-     * @return
+     * @param treeName Name of the tree to be found
+     * @return SymbolTree with that name.  Will throw exception if not found
      */
-    SymbolTree getSubtree (String treeName)
-    {
+    SymbolTree getSubtree (String treeName) {
         SymbolTree result = getSubtreeNoError(treeName);
 
-        if (result == null)
-        {
+        if (result == null) {
             throw new NoSuchElementException("Element not in tree");
         }
         return result;
     }
 
     /**
-     * @param treeName
-     * Recursive companion to above method
-     * @return
+     * Duplicate of getSubtree but will return null if it can't find the tree instead of throwing an error
+     * @param treeName Name of the tree to be found
+     * @return SymbolTree with that name or null if it can't be found
      */
-    public SymbolTree getSubtreeNoError(String treeName)
-    {
-        if (name.equals(treeName))
-        {
+    public SymbolTree getSubtreeNoError(String treeName) {
+        if (name.equals(treeName)) {
             return this;
-        }
-        else
-        {
-            for (SymbolTree child : children)
-            {
-                if (child.getSubtreeNoError(treeName) != null)
-                {
+        } else {
+            for (SymbolTree child : children) {
+                if (child.getSubtreeNoError(treeName) != null) {
                     return child;
                 }
             }
@@ -73,15 +75,16 @@ public class SymbolTree
         return null;
     }
 
+    /**
+     * Depth First Search of the children to find the provided tree name
+     * @param treeName Name of the tree to be found
+     * @return SymbolTree with that name or null if it can't be found
+     */
     public SymbolTree DFS(String treeName) {
-        if (name.equals(treeName))
-        {
+        if (name.equals(treeName)) {
             return this;
-        }
-        else
-        {
-            for (SymbolTree child : children)
-            {
+        } else {
+            for (SymbolTree child : children) {
                 SymbolTree childTree = child.getSubtreeNoError(treeName);
                 if (childTree != null) {
                     return childTree;
@@ -96,13 +99,11 @@ public class SymbolTree
      *
      * E.g. grandparent_parent_child
      *
-     * @param treeName
-     * @return
+     * @param treeName Name of the tree to be found
+     * @return Underscore delimited string of parents to the first child of the given name or null if the tree can't be found
      */
-    String pathTo (String treeName)
-    {
-        if (name.equals(treeName))
-        {
+    String pathTo (String treeName) {
+        if (name.equals(treeName)) {
             return name;
         }
 
@@ -112,12 +113,9 @@ public class SymbolTree
                 .findFirst()
                 .orElse(null);
 
-        if (suffix != null)
-        {
+        if (suffix != null) {
             return name + "_" + suffix;
-        }
-        else
-        {
+        } else {
             return null;
         }
     }
@@ -131,22 +129,17 @@ public class SymbolTree
      *  grandparent_childlessUncle
      *
      *
-     * @return
+     * @return A list of all paths from the root node terminating in a leaf node, delimited by underscores.
      */
     List<String> getAllPaths()
     {
-        if (isLeaf())
-        {
+        if (isLeaf()) {
             return Collections.singletonList(name);
-        }
-        else
-        {
+        } else {
             List<String> names = new LinkedList<>();
 
-            for (SymbolTree child : children)
-            {
-                for(String path : child.getAllPaths())
-                {
+            for (SymbolTree child : children) {
+                for(String path : child.getAllPaths()) {
                     names.add(name + "_" + path);
                 }
             }
@@ -155,34 +148,5 @@ public class SymbolTree
         }
     }
 
-    public int getIDFromTree() {
-        SymbolTree createBranch = getSubtreeNoError("id");
-        if (createBranch == null) {
-            return -1;
-        } else {
-            return Integer.parseInt(createBranch.getChildren().get(0).getChildren().get(0).name);
-        }
-    }
-
-    private void DFSForAttributeValuesUtiliy(LinkedList<SymbolTree> dfsCollection, SymbolTree currentTree, boolean includePreferences) {
-        for (SymbolTree child : currentTree.getChildren()) {
-            if ((child.getChildren().size() != 0 && !child.name.equals("create")) || (includePreferences && child.name.startsWith("is"))) {
-                DFSForAttributeValuesUtiliy(dfsCollection, child, includePreferences);
-            }
-        }
-        if (currentTree.name.charAt(0) == '[' || (includePreferences && currentTree.name.startsWith("is"))) {
-            dfsCollection.add(currentTree);
-        }
-    }
-
-    public LinkedList<SymbolTree> DFSForAttributeValues(boolean includePreferences) {
-        LinkedList<SymbolTree> dfsCollection = new LinkedList<>();
-        DFSForAttributeValuesUtiliy(dfsCollection, this, includePreferences);
-        return dfsCollection;
-    }
-
-    List<SymbolTree> getChildren()
-    {
-        return children;
-    }
+    List<SymbolTree> getChildren() { return children; }
 }

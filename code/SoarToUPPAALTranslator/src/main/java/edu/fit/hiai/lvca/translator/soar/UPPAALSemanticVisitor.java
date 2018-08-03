@@ -3,7 +3,6 @@ package edu.fit.hiai.lvca.translator.soar;
 import com.uppaal.model.core2.*;
 import edu.fit.hiai.lvca.antlr4.SoarBaseVisitor;
 import edu.fit.hiai.lvca.antlr4.SoarParser;
-import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.RuleNode;
@@ -13,17 +12,28 @@ import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Created and updated by Daniel Griessler throughout the summer of 2018
+ * Generates an XML document that can be then opened by Uppaal based on a Soar analysis provided by SymbolVisitor and SoarTranslator and ultimately on a Soar agent provided
+ * Uses package produced by makers of Uppaal to create and modify XML document
+ */
+
 public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
-    static final int SIZE_OF_TEXT = 17;
+    //Everything is run through the visitor pattern.  The visitor pattern follows the ANTLR grammar and is able to pass ONE data structure UP through the structure
+    //This limitation resulted in us adding many global variables that are modified and accessed throughout the visitor pattern.  This eliminates the requirement of sending only one
+    //complex data structure and we can add and remove structures as needed.
+    //Most of the maps will map production names to another map.  They also often work in pairs, one as the "current" one for the production and one that is the "global" one
+    //There are some structures specific to UppaalSemanticVisitor but there are also many that are just passed through from SymbolVisitor and SoarTranslator
+    private static final int SIZE_OF_TEXT = 17; //How far to shift text down in Uppaal model. Found by guess and check
     static final String LITERAL_STRING_PREFIX = "literal_string__";
     private final Set<String> _globals;
-    private HashMap<String, Integer> globalToIndex;
+    private HashMap<String, Integer> _globalToIndex;
     private final Set<String> _booleanGlobals;
     private final int NUM_OPERATORS;
     private final Map<String, Map<String, String>> _variableDictionary;
     private Integer _locationCounter = 0;
-    Document ourDocument = new Document(new PrototypeDocument());
+    private Document ourDocument = new Document(new PrototypeDocument());
     private Template _lastTemplate = null;
     private final Set<String> _templateNames = new HashSet<>();
     private boolean _unaryOrBinaryFlag = false;
@@ -34,19 +44,18 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private LinkedList<String> _uppaalOperatorCollection;
     private LinkedList<UppaalAttributeValueTriad> _AVCollection;
     private Map<String, Map<String, String>> _variablesToPathWithID;
-    private Map<String, String> conditionSideVariablesToTemps;
-    private LinkedList<String> conditionProductionIdentifiers;
-    private LinkedList<String> conditionProductionAttributes;
-    private LinkedList<String> conditionProductionValues;
-    private LinkedList<String> conditionProductionTemp;
-    private LinkedList<String> actionProductionIdentifiers;
-    private LinkedList<String> actionProductionAttributes;
-    private LinkedList<String> actionProductionValues;
-    private LinkedList<String> actionProductionFunctions;
-    private Map<String, String> attributesToTemps;
-    private LinkedList<String> attributeTemps;
+    private Map<String, String> _conditionSideVariablesToTemps;
+    private LinkedList<String> _conditionProductionIdentifiers;
+    private LinkedList<String> _conditionProductionAttributes;
+    private LinkedList<String> _conditionProductionValues;
+    private LinkedList<String> _conditionProductionTemp;
+    private LinkedList<String> _actionProductionIdentifiers;
+    private LinkedList<String> _actionProductionAttributes;
+    private LinkedList<String> _actionProductionValues;
+    private LinkedList<String> _actionProductionFunctions;
+    private Map<String, String> _attributesToTemps;
+    private LinkedList<String> _attributeTemps;
     private int _latestNum;
-    private int _maxQuerySize;
     private int _latestIndex;
     private Map<String, Boolean> _productionToOSupported;
     private Map<String, LinkedList<String>> _variableToAttributes;
@@ -56,7 +65,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     private Map<String, Boolean> _flags;
     private int _maxConditionSize = -1;
 
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, int maxQuerySize, Map<String, Boolean> productionToOSupported, Map<String, LinkedList<String>> variableToAttributes, Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction, Map<String, Map<String, String>> attributeVariableToArrayNamePerProduction) {
+    /**
+     * Creates a new UPPAALSemanticVisitor and copies all of the passed in structures to globals stored in here
+     * @param stringAttributeNames Set of string constants used in the Soar agent
+     * @param variablesPerProductionContext Map from production name to a mapping from a variable to its path
+     * @param boolAttributeNames Set of constants which are boolean values
+     * @param numOperators Number of operators that will be needed by Soar
+     * @param actualVariablesPerProduction Map from production name to ProductionVariables which distinguishes which variables are actual variables and which are used as identifiers later
+     * @param takenValues List of numbers which are reserved by Soar as constants
+     * @param uppaalOperatorCollection List of names of the all of the identifiers needed by Soar
+     * @param AVCollection List of UppaalAttributeValueTriad which make it easy to enumerate all of the AV templates
+     * @param variablesToPathWithID Map from production name to mapping from a variable to its path with ID
+     * @param productionToOSupported Map from production name to whether or not it is O-supported
+     * @param variableToAttributes Map from variable (identifier) to its list of attributes that are associated with it
+     * @param attributeVariableToDisjunctionTestPerProduction Map from production name to a mapping from variable (attribute) to a String array of the values it has to match
+     *                                                        when used in a disjunctive test
+     */
+    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Boolean> productionToOSupported, Map<String, LinkedList<String>> variableToAttributes, Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction) {
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
@@ -67,7 +92,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         _uppaalOperatorCollection = uppaalOperatorCollection;
         _AVCollection = AVCollection;
         _variablesToPathWithID = variablesToPathWithID;
-        _maxQuerySize = maxQuerySize + 1;
         _latestNum = 1 + _globals.size() + _uppaalOperatorCollection.size();
         _productionToOSupported = productionToOSupported;
         _variableToAttributes = variableToAttributes;
@@ -75,6 +99,13 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         _attributeVariableToArrayNamePerProduction = cleanAttributeVariableToArrayName();
     }
 
+    /**
+     * Utility for cleanAttributeVariableToArrayName
+     * Goes through all the productions and collects all distinct arrays into a mapping from an array name to that array.
+     * @param checkArray String array to be checked
+     * @param index Most recent index for giving unique names to all of the arrays. It is an array so that it is passed by reference and not by value
+     * @return Name of the array to be stored in the currentVariableToArrayName
+     */
     private String getArrayName(String[] checkArray, int[] index) {
         String arrayName = null;
         for (Map.Entry<String, String[]> arrayNameEntry : _disjunctionArrayNameToArray.entrySet()) {
@@ -92,10 +123,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     }
 
     /**
-     * This is super space inefficent right now.  It's checking if the arrays are equal by looping through all the elements in both arrays
-     * This can be made much more efficent by storing the arrays as encoded single values which can then be compared
-     * #todo make this more efficent
-     * @return
+     * This is super space inefficient right now.  It's checking if the arrays are equal by looping through all the elements in both arrays
+     * This can be made much more efficient by storing the arrays as encoded single values which can then be compared
+     * #todo make this more efficient
+     * @return Map from production to mapping from variable (attribute) to the name of the array
      */
     private Map<String, Map<String, String>> cleanAttributeVariableToArrayName() {
         int[] index = {1};
@@ -111,6 +142,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return productionToAttributeToArrayName;
     }
 
+    /**
+     * Increments the provided value by 1 and then continually by 1 until it doesn't match the next element of _takenValues
+     * @param i The index to be incremented
+     * @return The next available index
+     */
     private int getNextIndex(int i) {
         i++;
         if (_takenValues != null) {
@@ -122,24 +158,37 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return i;
     }
 
+    /**
+     * Fills _globalToIndex with a mapping from the variable to its index in Uppaal
+     */
     private void fillGlobalToIndex() {
-        globalToIndex = new HashMap<>();
+        _globalToIndex = new HashMap<>();
         int i = getNextIndex(0);
         for (String variable : _globals) {
             if (!variable.equals("nil")) {
-                globalToIndex.put(variable, i);
+                _globalToIndex.put(variable, i);
                 i = getNextIndex(i);
             }
         }
     }
 
+    /**
+     * Gets the String equivalent of the current value in _locationCounter and increments _locationCounter
+     * @return Current value of _locationCounter as a String
+     */
     private String getCounter() {
         String i = _locationCounter.toString();
         _locationCounter++;
         return i;
     }
 
-    private void addConstantToGlobals(StringBuilder globalVariables, String variable, Integer variableIndex) {
+    /**
+     * Adds the provided variable with its provided variableIndex to the StringBuilder provided as a constant int
+     * @param globalVariables StringBuilder to be adding the new constant to
+     * @param variable Variable name to be added
+     * @param variableIndex Index to which the variable is associated. If null, the value will begin uninitialized
+     */
+    private void addConstantToBuilder(StringBuilder globalVariables, String variable, Integer variableIndex) {
         globalVariables.append("const ");
         globalVariables.append("int ");
         globalVariables.append(variable);
@@ -150,37 +199,44 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         globalVariables.append(";\n");
     }
 
-    private void getDeclarationElement() {
+    /**
+     * Gets the global declaration that is found in Uppaal. There is one StringBuilder that is filled with a lot of static text as well as some that depends on the specific Soar model
+     * This method can only be run after the condition and action side of the productions have been visited since it depends on many of the global variables being changed and updated
+     */
+    private void getGlobalDeclaration() {
         _globals.remove("nil"); // added later so that nil always equals 0
 
-        StringBuilder vars = new StringBuilder();
+        StringBuilder globalDeclaration = new StringBuilder();
 
-        vars.append(_booleanGlobals
+        globalDeclaration.append(_booleanGlobals
                 .stream()
                 .map(SoarTranslator::simplifiedString)
                 .map(var -> "bool " + var + "; \n")
                 .collect(Collectors.joining()));
 
-        vars.append("const int nil = 0;\n" +
+        globalDeclaration.append("const int nil = 0;\n" +
                 "const int nilAnything = -1;\n");
 
+        // This initial part goes through and adds in all of the arbitrary indexes that Uppaal needs to use to represent "strings" since it can only handling storing ints
+        // Note: There is a cap to how large the ints can go in Uppaal, if you are having overflow int problems then start here with any fixes
+        // The counter starts at 1 and increments up. Currently, nil takes 0 and then some of the initial negative numbers are reserved for special keywords needing in the model
         StringBuilder globalVariables = new StringBuilder();
         int index = 1;
         for (String variable : _globals) {
-            int nextGlobalIndex = globalToIndex.get(variable);
-            addConstantToGlobals(globalVariables, SoarTranslator.simplifiedString(variable), nextGlobalIndex);
+            int nextGlobalIndex = _globalToIndex.get(variable);
+            addConstantToBuilder(globalVariables, SoarTranslator.simplifiedString(variable), nextGlobalIndex);
             index = Math.max(nextGlobalIndex, index);
         }
         index++;
         LinkedList<String> actualOperatorCollection = new LinkedList<>();
         for (String variable : _uppaalOperatorCollection) {
-            addConstantToGlobals(globalVariables, SoarTranslator.simplifiedString(variable), index++);
+            addConstantToBuilder(globalVariables, SoarTranslator.simplifiedString(variable), index++);
             if (variable.startsWith("state_operator")) {
                 actualOperatorCollection.add(variable);
             }
         }
-        addConstantToGlobals(globalVariables, "finalOp", index++);
-        addConstantToGlobals(globalVariables, "_state", -1);
+        addConstantToBuilder(globalVariables, "finalOp", index++);
+        addConstantToBuilder(globalVariables, "_state", -1);
 
         for (String variable : _variableToAttributes.keySet()) {
             String variableText;
@@ -189,16 +245,22 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             } else {
                 variableText = variable;
             }
-            addConstantToGlobals(globalVariables, SoarTranslator.simplifiedString(variableText) + "_num_attributes", _variableToAttributes.get(variable).size());
+            addConstantToBuilder(globalVariables, SoarTranslator.simplifiedString(variableText) + "_num_attributes", _variableToAttributes.get(variable).size());
         }
-        //index is set to latest negative number.  Currently, -12
+
+        //index is set to latest negative number.  Currently, -12. Based on what other values are needed , you can move this further negative. These just need to be distinct values
         index = -12;
         int max = -1;
+
+        // This not only adds in all the noneBut (disjunction tests) as declarations
+        // It also adds a switch statement to retrieve the value of the noneBut array at the provided index if the index is valid
+        // The switch is actually added to the globalDeclaration until close to the very end since I wanted to list the other variables first
+        // The switch is made all the way up here because it adds to globalVariables
         StringBuilder noneButSwitch = _disjunctionArrayNameToArray.values().size() > 0 ? new StringBuilder("int getNumButNextElement(int numBut, int index) {\n") : null;
         boolean hasIf = false;
         for (Map.Entry<String, String[]> disjunctionMap : _disjunctionArrayNameToArray.entrySet()) {
             max = Math.max(max, disjunctionMap.getValue().length);
-            addConstantToGlobals(globalVariables, disjunctionMap.getKey(), index--);
+            addConstantToBuilder(globalVariables, disjunctionMap.getKey(), index--);
             globalVariables.append("const int ").append(disjunctionMap.getKey()).append("_array[").append(disjunctionMap.getValue().length).append("] = {");
             for (int i = 0; i< disjunctionMap.getValue().length; i++) {
                 if (i != 0) {
@@ -207,7 +269,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 globalVariables.append(SoarTranslator.simplifiedString(disjunctionMap.getValue()[i]));
             }
             globalVariables.append("};\n");
-            addConstantToGlobals(globalVariables, disjunctionMap.getKey() + "_array_size", disjunctionMap.getValue().length);
+            addConstantToBuilder(globalVariables, disjunctionMap.getKey() + "_array_size", disjunctionMap.getValue().length);
             noneButSwitch.append("\t");
             if (hasIf) {
                 noneButSwitch.append("} else ");
@@ -229,19 +291,22 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             noneButSwitch.append("}\n");
         }
 
-        vars.append(globalVariables.toString());
+        // Adds all of the declarations for the identifiers, attributes, and values that are needed for this particular Soar agent into the global declaration
+        globalDeclaration.append(globalVariables.toString());
 
-        vars.append("broadcast chan Run_Rule;\n" +
+        // This is a large static bit of text that is needed for every Soar model no matter the size or complexity.
+        // If you need to change a part of the Uppaal model that is accessed by at least two templates, you will need to add its declaration in here somewhere
+        // We have it mostly separated by groups so try and keep things sorted
+        globalDeclaration.append("broadcast chan Run_Rule;\n" +
                 "broadcast chan Halt;\n" +
                 "broadcast chan Reset_Apply;\n" +
-                "bool halt = false;\n" +
                 "chan Continue_Run;\n" +
                 "chan Require_Test;\n" +
+                "bool halt = false;\n" +
                 "bool isRetracting;\n" +
                 "bool addOperator;\n" +
                 "bool removeOperator;\n" +
                 "bool productionFired;\n" +
-                "const int EMPTY = -2;\n" +
                 "const int numTemplates = " + _templateNames.size() + ";\n" +
                 "int stackCondition[numTemplates];\n" +
                 "int stackAction[numTemplates];\n" +
@@ -250,6 +315,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "int stackActionIndex = -1;\n" +
                 "int stackRetractIndex = -1;\n" +
                 "int selectedFinalOperatorIndex;\n" +
+                "const int EMPTY = -2;\n" +
                 "const int remove = -3;\n" +
                 "const int addFunction = -4;\n" +
                 "const int subtractFunction = -5;\n" +
@@ -276,13 +342,15 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         for (LinkedList<String> nextNumAttributes : _variableToAttributes.values()) {
             totalAttributeSize += nextNumAttributes.size();
         }
-        vars.append("const int TOTAL_NUM_ATTRIBUTES = " +
+        globalDeclaration.append("const int TOTAL_NUM_ATTRIBUTES = " +
                 totalAttributeSize + ";\n" +
                 "int nestedCheckArray[TOTAL_NUM_ATTRIBUTES];\n" +
                 "int nestedCheckIndex = 0;\n");
 
-
-        vars.append("\n" +
+        // Static string
+        // Contains two structures used for operators
+        // Also contains, all the methods that are needed for stacks and operators right now.  Some can probably be condensed
+        globalDeclaration.append("\n" +
                 "int id = 1;\n" +
                 "const int N = " + NUM_OPERATORS + ";\n" +
                 "\n" +
@@ -465,7 +533,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "}\n" +
                 "\n");
 
-        vars.append("int getNumAttributes(int variable) {\n");
+        // Switch statement to get the number of attributes associated with each identifier
+        // Used for recursive retraction
+        globalDeclaration.append("int getNumAttributes(int variable) {\n");
 
         StringBuilder newSwitch = new StringBuilder();
         newSwitch.append("\tif (variable == finalOp){\n\t\treturn 1;\n\t}");
@@ -474,19 +544,31 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             newSwitch.append(" else if (variable == " + correctedName + ") {\n").append("\t\treturn " + correctedName + "_num_attributes;\n").append("\t}");
         }
         newSwitch.append(" else {\n").append("\t\treturn -1;\n").append("\t}\n");
-        vars.append(newSwitch).append("}\n").append("\n");
+        globalDeclaration.append(newSwitch).append("}\n").append("\n");
 
-        getOperatorToIDAndBack(actualOperatorCollection, "getOperatorFromID(int id)", "id", true, vars);
+        // Until I can think of a better way to do it, these are two switch statements that are inverses of each other
+        // One you give the id and it gives you the operator associated with it, the other given the operator gives you the id
 
-        getOperatorToIDAndBack(actualOperatorCollection, "getIDFromOperator(int operator)", "operator", false, vars);
+        getOperatorToIDAndBack(actualOperatorCollection, "getOperatorFromID(int id)", "id", true, globalDeclaration);
 
+        getOperatorToIDAndBack(actualOperatorCollection, "getIDFromOperator(int operator)", "operator", false, globalDeclaration);
+
+        // This switch is filled at the top of this method, but placed here because it isn't as important and can go much lower in the declaration
         if (noneButSwitch != null) {
-            vars.append(noneButSwitch);
+            globalDeclaration.append(noneButSwitch);
         }
 
-        ourDocument.setProperty("declaration", vars.toString());
+        ourDocument.setProperty("declaration", globalDeclaration.toString());
     }
 
+    /**
+     * Produces switch statement that is either for getOperatorFromID or getIDFromOperator
+     * @param actualOperatorCollection LinkedList of operators (path with ID)
+     * @param functionName Name of which function it is
+     * @param ifPart The variable from the function that is being compared, you could probably also just get it from the function name
+     * @param operatorFromID Flag that indicates which method it is
+     * @param currentDeclaration Current declaration builder that the method is being added to
+     */
     private void getOperatorToIDAndBack(LinkedList<String> actualOperatorCollection, String functionName, String ifPart, boolean operatorFromID, StringBuilder currentDeclaration) {
         currentDeclaration.append("int ").append(functionName).append(" {\n");
 
@@ -520,6 +602,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         currentDeclaration.append(newSwitch);
     }
 
+    /**
+     * Sets the system declaration for Uppaal based on all the templates that were created.
+     * @param attributeValuePairs These are all the attributeValuePairs that are created in the getScheduler method based on the UppaalAttributeValueTriad
+     */
     private void getSystemElement(Element attributeValuePairs) {
         List<String[]> compoundNames = _templateNames.stream().map(name -> new String[]{name + "_0", name}).collect(Collectors.toList());
         StringBuilder system = new StringBuilder();
@@ -538,19 +624,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         ourDocument.setProperty("system", system.toString());
     }
 
+    /**
+     * Visits each production, sets up the global declaration, builds the AV pairs and the supporter templates, and finally saves the document
+     * @param ctx Entire Soar file
+     * @return Null
+     */
     @Override
     public Node visitSoar(SoarParser.SoarContext ctx) {
 
         ctx.soar_production().forEach(sp -> sp.accept(this));
 
-        getDeclarationElement();
+        getGlobalDeclaration();
 
         Element attributeValuePairs = getScheduler();
 
         getOperatorPreferences();
 
         getSystemElement(attributeValuePairs);
-
 
         try {
             ourDocument.save("sampledoc.xml");
@@ -561,13 +651,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
+    /**
+     * Calculates the X location of where a name should go in Uppaal based on the length of the name. Calculation based on guess and check in Uppaal
+     * @param name Name of the location
+     * @param lastLocationCoordsX Initial location from which to calculate the names location
+     * @return Calculated locatoin for the name
+     */
     private int getNameLocation(String name, int lastLocationCoordsX) {
         if (name == null) {
             return 0;
         }
+        // The 10 is a magic constant based on guess and check in Uppaal.  It works almost all the time.
         return lastLocationCoordsX - 10 - 10*(name.length() - 1);
     }
 
+    /**
+     * Gets the positive and inverse version of the guard provided. Utility for addVerticalLocation
+     * @param startGuard Initial guard
+     * @return Array of size 2 with the structure: {regularGuard, inverseGuard}
+     */
     private String[] getGuards(String startGuard) {
         String[] guards = new String[2];
         if (startGuard.equals("globalDoesContain")) {
@@ -580,7 +682,22 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return guards;
     }
 
+    /**
+     * Adds a location in Uppaal horizontally with an edge going back to the provided lastLocation.  The distance was chosen arbitrarily so it can be manipulated
+     * @param currentTemplate The current template where the location will be added
+     * @param lastLocation The last location where the edge will be coming from and then going to the new location created
+     * @param lastLocationCoords The coordinates of the last location. They can also be found with a .getX() and .getY() method from the location but it's a little easier with them stored this way
+     * @param name Name of the new location
+     * @param synchronization Text for the synchronization. If null, then there won't be any synchronization on the edge
+     * @param stackGuard Text for the guard. If null, then there won't be any guard on the edge
+     * @param assignment Text for the assignment.  If null, then there won't be any assignmnet on the edge
+     * @param mirrored If true, then the new location will be added to the right of the last location.  If false, to the left.
+     * @param startLocation The start location of the current template. If not null, then there is a back edge added to go back to start
+     * @return The new last location is the newly created location
+     */
     private Location addHorizontalLocation(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String name, String synchronization, String stackGuard, String assignment, boolean mirrored, Location startLocation) {
+        // Both of these variables allow you to easily change where the text is
+        // These constants should be extracted todo: extract constants
         int xTextLocation = lastLocationCoords[0] + (mirrored ? -370 : 0) + 20;
         int xTempCoords = lastLocationCoords[0] + (mirrored ? -370 : 370);
         Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, name, getCounter(), true, false, xTempCoords, 0, getNameLocation(name, xTempCoords), lastLocationCoords[1] - 32 + (mirrored ? -1 * SIZE_OF_TEXT : 0));
@@ -593,10 +710,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return lastLocationTemp;
     }
 
+    /**
+     * Utility method for adding an edge that goes from the provided location back to the other provided location with the given guard and assignment
+     * @param currentTemplate The current template where the edge will be added
+     * @param fromLocation The source of the new edge
+     * @param fromLocationCoords The coordinates of the source. You can also get these with .getX() and .getY() methods
+     * @param toLocation The destination of the edge
+     * @param guard Text for the guard. If null, then there won't be any guard on the edge
+     * @param kickBackIndex Part of the utility fro the addVerticalLocation is to change where you are kick to. This is the index of which location is being kicked back to in that case
+     * @param kickBackReference Part of the utility fro the addVerticalLocation is to change where you are kick to. This is the location which is being kicked back to in that case
+     * @param isRetraction Says if the production is I-supported (True) or O-supported (False)
+     * @param indexToKickBackCommands Needed when kicking back on the guard side. Includes the assignment of the edge before the one you are kicking back to without saving any of
+     *                                the temporary variables. This allows you to get the next value/check the last condition without overwriting the temporary variable incorrectly
+     */
     private void kickBackToProvidedLocation(Template currentTemplate, Location fromLocation, int[] fromLocationCoords, Location toLocation, String guard, Integer kickBackIndex, Location kickBackReference, boolean isRetraction, Map<Integer, StringBuilder> indexToKickBackCommands) {
         Integer[] textLocation = new Integer[2];
         Integer[] nails;
         String assignment;
+        // Allows for the use of this method under different conditions. It changes where the nails are if any, where the text goes and so forth
+        // The location of text and nails is highly customizable and easy to change by editing the constants.  They were selected by guess and check
         if (isRetraction) {
             textLocation[0] = fromLocationCoords[0] - (370/2) - 7;
             textLocation[1] = fromLocationCoords[1] - SIZE_OF_TEXT;
@@ -605,7 +737,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             } else {
                 nails = new Integer[]{toLocation.getX(), fromLocation.getY()};
             }
-//            nails = new Integer[]{fromLocationCoords[0] - (370/2) - 10, fromLocationCoords[1], fromLocationCoords[0] - (370/2) - 10, -110, fromLocationCoords[0] + 370, -110};
             assignment = null;
         } else {
             if (kickBackReference != null) {
@@ -628,7 +759,18 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdgeWithNails(currentTemplate, fromLocation, toLocation, null, null, null, null, guard, textLocation, assignment, new Integer[]{textLocation[0], textLocation[1] + 2*SIZE_OF_TEXT}, nails);
     }
 
+    /**
+     * Adds a single vertical location down from the last location and an edge that goes from the last location to the new location.
+     * Compare this to addVerticalLocation which includes a for loop adding many vertical edges
+     * @param currentTemplate The current template where the edge will be added
+     * @param lastLocation The last location where the edge will be coming from and then going to the new location created
+     * @param lastLocationCoords The coordinates of the last location. They can also be found with a .getX() and .getY() method from the location but it's a little easier with them stored this way
+     * @param guard Text for the guard. If null, then there won't be any guard on the edge
+     * @param assignment Text for the assignment.  If null, then there won't be any assignmnet on the edge
+     * @return The new last location which is the newly created location
+     */
     private Location addSingleVerticalLocation(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String guard, String assignment) {
+        // The constants are highly customisable and were selected based on guessing and checking the Uppaal model. Modify as needed
         Integer[] textLocation = new Integer[]{lastLocationCoords[0] + 25, lastLocationCoords[1] + SIZE_OF_TEXT};
         int yTempCoords = lastLocationCoords[1] + 200;
         Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, null, getCounter(), true, false, lastLocationCoords[0], yTempCoords, null, null);
@@ -638,10 +780,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return lastLocation;
     }
 
+    /**
+     * Adds all of the vertical locations needed in the provided array of conditionsOrAssignments
+     * @param currentTemplate The current template where the location will be added
+     * @param lastLocation The last location where the edge will be coming from and then going to the new location created
+     * @param lastLocationCoords The coordinates of the last location. They can also be found with a .getX() and .getY() method from the location but it's a little easier with them stored this way
+     * @param guard Text for the guard. If null, then there won't be any guard on the edge
+     * @param conditionsOrAssignments Array of StringBuilders with the remaining conditions or actions. The 1st element should have been added horizontally
+     * @param kickBackLocation If provided, this will be where a back edge is created using kickBackToProvidedLocation
+     * @param kickBackIndexes Keeps track of the indices of the which location any given location should kick back to
+     * @param kickBackReferences Array of locations which is indexed by kickBackIndexes
+     * @param isRetraction Says if the production is I-supported (True) or O-supported (False)
+     * @param indexToKickBackCommands Map from kickBackIndex to what the assignments are for that edge
+     * @return The new last location which is the last newly created location
+     */
     private Location addVerticalLocation(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String guard, StringBuilder[] conditionsOrAssignments, Location kickBackLocation, int[] kickBackIndexes, Location[] kickBackReferences, boolean isRetraction, Map<Integer, StringBuilder> indexToKickBackCommands) {
         String[] guardAndInverseGuard = getGuards(guard);
         for(int i = 1; i < conditionsOrAssignments.length; i++) {
             lastLocation = addSingleVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, guardAndInverseGuard[0], conditionsOrAssignments[i].toString());
+            // This if statement is satisfied during conditions which need back edges
             if (guardAndInverseGuard[1] != null) {
                 if (isRetraction) {
                     kickBackToProvidedLocation(currentTemplate, lastLocation, lastLocationCoords, kickBackLocation, guardAndInverseGuard[1], null, null, isRetraction, null);
@@ -651,7 +808,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 }
             }
         }
-        if (guardAndInverseGuard[1] != null && !isRetraction && (conditionSideVariablesToTemps.size() > 0 || attributesToTemps.size() > 0)) {
+        // This is the extra location needed to make sure that the combination of variables that are being matched haven't already been matched by the production
+        if (guardAndInverseGuard[1] != null && !isRetraction && (_conditionSideVariablesToTemps.size() > 0 || _attributesToTemps.size() > 0)) {
             lastLocation = addSingleVerticalLocation(currentTemplate, lastLocation, lastLocationCoords, guardAndInverseGuard[0], "valueFunction = 0,\nattributeFunction = 0,\nglobalIdentifier = 0,\nglobalAttribute = 0,\nglobalValue = 0,\nglobalDoesContain = 0,\ncheckProductionsContain()");
             kickBackToProvidedLocation(currentTemplate, lastLocation, lastLocationCoords, kickBackLocation, guardAndInverseGuard[1], kickBackIndexes[kickBackIndexes.length - 1], kickBackIndexes[kickBackIndexes.length - 1] == -1 ? null : kickBackReferences[kickBackIndexes[kickBackIndexes.length - 1]], isRetraction, indexToKickBackCommands);
         }
@@ -659,7 +817,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return lastLocation;
     }
 
+    /**
+     * Used to move from the last condition to the start of the assignments
+     * @param currentTemplate The current template where the location will be added
+     * @param lastLocation The last location where the edge will be coming from and then going to the new location created
+     * @param lastLocationCoords The coordinates of the last location. They can also be found with a .getX() and .getY() method from the location but it's a little easier with them stored this way
+     * @param name Name of the location to be added
+     * @param guard Text for the guard. If null, then there won't be any guard on the edge
+     * @param assignment Text for the assignment.  If null, then there won't be any assignmnet on the edge
+     * @param mirrored If true, then the new location will be added to the right of the last location.  If false, to the left.
+     * @return The new last location which is the last newly created location
+     */
     private Location goToNextStage(Template currentTemplate, Location lastLocation, int[] lastLocationCoords, String name, String guard, String assignment, boolean mirrored) {
+        // This variable allows you to easily change where the text is and where the location coordinates are.  They are based purely on guess and check in Uppaal
+        // These constants should be extracted
         int xTempCoords = lastLocationCoords[0] + (mirrored ? -370 : 370);
         Location lastLocationTemp = makeLocationWithCoordinates(currentTemplate, name, getCounter(), true, false, xTempCoords, 0, getNameLocation(name, xTempCoords), -32 + (mirrored ? -1 * SIZE_OF_TEXT : 0));
         Integer[] nails = new Integer[]{lastLocationCoords[0] + (mirrored ? (-370/3) : (370/3)), lastLocationCoords[1] + 200, xTempCoords, lastLocationCoords[1] + 200};
@@ -670,6 +841,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return lastLocationTemp;
     }
 
+    /**
+     * Adds an edge back to the provided location going up and over the other locations
+     * @param currentTemplate The current template where the location will be added
+     * @param lastLocation The last location where the edge will be coming from and then going to the new location created
+     * @param startLocation The start location of the template
+     * @param lastLocationCoords The coordinates of the last location. They can also be found with a .getX() and .getY() method from the location but it's a little easier with them stored this way
+     * @param guard Text for the guard. If null, then there won't be any guard on the edge
+     * @param assignment Text for the assignment.  If null, then there won't be any assignmnet on the edge.  In this case, it also signals if there needs to be a synchronization
+     * @param mirrored Changes which nails are placed and what direction the text is moved from the lastLocation
+     */
     private void goBackToProvidedLocation(Template currentTemplate, Location lastLocation, Location startLocation, int[] lastLocationCoords, String guard, String assignment, boolean mirrored) {
         Integer[] nails;
         if (mirrored) {
@@ -681,6 +862,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         if (assignment == null) {
             synchronization = null;
         } else {
+            // Note the difference between Halt! and halt
+            // Halt! is the signal from at least one production in a Soar agent that halts the other Soar agents
+            // halt is for Halt? which is waiting for a halt command and is needed to stop checking the other conditions and assignments because we halted the Soar agent
             switch (assignment) {
                 case ("Halt!"):
                     synchronization = "Halt!";
@@ -694,6 +878,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                     synchronization = null;
             }
         }
+        // These variables move the text around so that it looks good. Guess and check with Uppaal. Modify as needed
         int assignmentSpace = lastLocationCoords[1] - 110 - SIZE_OF_TEXT * (assignment != null && assignment.contains("halt") ? 0 : getNumLines(assignment, ","));
         int textLocationX = lastLocationCoords[0] + (mirrored ? -(370/2) - 7 : -370);
         Integer[] guardLocation = new Integer[]{textLocationX,  assignmentSpace - SIZE_OF_TEXT * getNumLines(guard, " &&")};
@@ -702,6 +887,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, synchronization, new Integer[]{textLocationX, guardLocation[1] - SIZE_OF_TEXT}, guard, guardLocation, assignment, assignmentLocation, nails);
     }
 
+    /**
+     * Adds an edge back from the last assignment back to the start
+     * @param currentTemplate The current template where the location will be added
+     * @param lastLocation The last location where the edge will be coming from and then going to the new location created
+     * @param startLocation The start location of the template
+     * @param lastLocationCoords The coordinates of the last location. They can also be found with a .getX() and .getY() method from the location but it's a little easier with them stored this way
+     * @param operatorAssignments List of operator assignments are all just done at once on the last edge
+     * @param needsRetraction Says if the production is I-supported (True) or O-supported (False)
+     * @param guard Text for the guard. If null, then there won't be any guard on the edge
+     */
     private void goBackToStartFromAssignment(Template currentTemplate, Location lastLocation, Location startLocation, int[] lastLocationCoords, String operatorAssignments, boolean needsRetraction, String guard) {
         StringBuilder assignment = new StringBuilder("addOperator = false,\nremoveStackAction()");
         if (!needsRetraction) {
@@ -711,16 +906,27 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             assignment.append(",\n").append(operatorAssignments);
         }
         assignment.append(",\nfillNextProduction()");
+        // These variables move the text around so that it looks good. Guess and check with Uppaal. Modify as needed
         Integer[] textLocation = new Integer[]{lastLocationCoords[0] + 25, lastLocationCoords[1] - (SIZE_OF_TEXT*getNumLines(guard, " &&"))};
         Integer[] nails = new Integer[]{lastLocationCoords[0] + 370, lastLocationCoords[1], lastLocationCoords[0] + 370, -110, startLocation.getX(), -110};
         makeEdgeWithNails(currentTemplate, lastLocation, startLocation, null, null, null, null, guard, textLocation, assignment.toString(), new Integer[]{textLocation[0], textLocation[1] + (getNumLines(guard, " &&")*SIZE_OF_TEXT)}, nails);
     }
 
+    /**
+     * Sets the start location coordinates.  Alter here if you want to the template locations around
+     * @param lastLocationCoords Location of the last location. This initializes the first two values to be X and Y values respectively
+     */
     private void setLastLocationCoords(int[] lastLocationCoords) {
         lastLocationCoords[0] = -152;
         lastLocationCoords[1] = 0;
     }
 
+    /**
+     * Helpful utility for counting how far to move text up or down
+     * @param text Text to be analyzed
+     * @param lookFor What snippet to look for. Guards have " &&" for each new line to be added. Assignments have " ," for each new line
+     * @return The count of how many new lines are in the given text based on the lookFor
+     */
     private Integer getNumLines(String text, String lookFor) {
         if (text == null) {
             return 0;
@@ -736,20 +942,28 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return countLookFor;
     }
 
+    /**
+     * Sets up the declaration for each production. Needs to be called after the visits to the condition and action side of the production at least.
+     * @param productionName Name of the production
+     * @param operatorIndexes Set of the operator indexes that are accessed in this production
+     * @param conditionTempToIndex Map from temporary variables needed for this production to their index. Filled during function
+     * @param attributeTempToIndex Map from temporary attribute variable needed for this production to their index. Filled during function
+     * @return The production's declaration
+     */
     private String getProductionDeclaration(String productionName, Set<String> operatorIndexes, Map<String, Integer> conditionTempToIndex, Map<String, Integer> attributeTempToIndex) {
         StringBuilder currentTemplateDeclaration = new StringBuilder();
-        int currentLatestNum = _latestNum;
-        for (String dummyVariable : conditionSideVariablesToTemps.values()) {
-            currentTemplateDeclaration.append("int ").append(dummyVariable).append(" = ").append(currentLatestNum++).append(";\n");
+        for (String dummyVariable : _conditionSideVariablesToTemps.values()) {
+            currentTemplateDeclaration.append("int ").append(dummyVariable).append(";\n");
         }
-        for (String dummyVariable : attributesToTemps.values()) {
-            currentTemplateDeclaration.append("int ").append(dummyVariable).append(" = ").append(currentLatestNum++).append(";\n");
+        for (String dummyVariable : _attributesToTemps.values()) {
+            currentTemplateDeclaration.append("int ").append(dummyVariable).append(";\n");
         }
+        // This sets how many productions are allowed to match. As we allow for multiple productions matching per cycle then this will need to change depending the production
         currentTemplateDeclaration.append("const int NUMBER_OF_PRODUCTIONS = 1;\n");
         currentTemplateDeclaration.append("\n");
 
-        int conditionTemps = conditionSideVariablesToTemps.size();
-        int attributeTemps = attributesToTemps.size();
+        int conditionTemps = _conditionSideVariablesToTemps.size();
+        int attributeTemps = _attributesToTemps.size();
 
 
         if (conditionTemps != 0 || attributeTemps != 0) {
@@ -771,12 +985,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
             currentTemplateDeclaration.append("void fillNextProduction() {\n");
             int index = 0;
-            for (String nextTemp : conditionSideVariablesToTemps.values()) {
+            for (String nextTemp : _conditionSideVariablesToTemps.values()) {
                 conditionTempToIndex.put(nextTemp, index);
                 currentTemplateDeclaration.append("\tproductions[productionIndex].savedTempAndFunction[" + index++ + "] = " + nextTemp + ";\n");
             }
             index = 0;
-            for (String nextTemp : attributesToTemps.values()) {
+            for (String nextTemp : _attributesToTemps.values()) {
                 attributeTempToIndex.put(nextTemp, index);
                 currentTemplateDeclaration.append("\tproductions[productionIndex].savedAttributeTemp[" + index++ + "] = " + nextTemp + ";\n");
             }
@@ -789,6 +1003,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             currentTemplateDeclaration.append("\tfor (i = 0; i < productionIndex; i++) {\n");
             currentTemplateDeclaration.append("\t\tif (");
             boolean first = true;
+            //todo: sort this by value so that they come out in a consistent fashion
             for (Map.Entry<String, Integer> conditionTempToIndexEntry : conditionTempToIndex.entrySet()) {
                 if (!first) {
                     currentTemplateDeclaration.append(" &&\n\t\t\t");
@@ -823,29 +1038,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             currentTemplateDeclaration.append("}\n").append("\n");
         }
 
-
-        if (!_productionToOSupported.get(productionName)) {
-            if (operatorIndexes != null) {
-                currentTemplateDeclaration.append("\nvoid checkAndClearFinalOperator() {\n");
-                currentTemplateDeclaration.append("\t if(");
-                StringBuilder addOperatorsToRetract = new StringBuilder();
-                StringBuilder clearOperators = new StringBuilder();
-                for (String nextOperatorIndex : operatorIndexes) {
-                    if (currentTemplateDeclaration.charAt(currentTemplateDeclaration.length() - 1) != '(') {
-                        currentTemplateDeclaration.append(" || ");
-                    }
-                    int correctedIndex = Integer.parseInt(nextOperatorIndex) + 1;
-                    currentTemplateDeclaration.append("selectedFinalOperatorIndex == " + correctedIndex);
-                    addOperatorsToRetract.append("\tretractOperators[retractOperatorsIndex++] = ").append(correctedIndex).append(";\n");
-                    clearOperators.append("\tclearOperator(").append(correctedIndex-1).append(");\n");
-                }
-                currentTemplateDeclaration.append(") {\n").append("\t\taddToNestedCheckArray(finalOp);\n").append("\t}\n");
-                currentTemplateDeclaration.append(addOperatorsToRetract);
-                currentTemplateDeclaration.append(clearOperators);
-                currentTemplateDeclaration.append("}\n");
-
-            }
-        } else {
+        if (_productionToOSupported.get(productionName)) {
             currentTemplateDeclaration.append("int currentNumFiringPerCycle = 0;\n");
             currentTemplateDeclaration.append("void checkProductionHasOperator() {\n");
             currentTemplateDeclaration.append("\tif (retractOperatorsIndex > 0) {\n");
@@ -877,12 +1070,33 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             currentTemplateDeclaration.append("\t\t}\n");
             currentTemplateDeclaration.append("\t}\n");
             currentTemplateDeclaration.append("}\n").append("\n");
+        } else if (operatorIndexes != null) {
+            currentTemplateDeclaration.append("\nvoid checkAndClearFinalOperator() {\n");
+            currentTemplateDeclaration.append("\t if(");
+            StringBuilder addOperatorsToRetract = new StringBuilder();
+            StringBuilder clearOperators = new StringBuilder();
+            for (String nextOperatorIndex : operatorIndexes) {
+                if (currentTemplateDeclaration.charAt(currentTemplateDeclaration.length() - 1) != '(') {
+                    currentTemplateDeclaration.append(" || ");
+                }
+                int correctedIndex = Integer.parseInt(nextOperatorIndex) + 1;
+                currentTemplateDeclaration.append("selectedFinalOperatorIndex == " + correctedIndex);
+                addOperatorsToRetract.append("\tretractOperators[retractOperatorsIndex++] = ").append(correctedIndex).append(";\n");
+                clearOperators.append("\tclearOperator(").append(correctedIndex-1).append(");\n");
+            }
+            currentTemplateDeclaration.append(") {\n").append("\t\taddToNestedCheckArray(finalOp);\n").append("\t}\n");
+            currentTemplateDeclaration.append(addOperatorsToRetract);
+            currentTemplateDeclaration.append(clearOperators);
+            currentTemplateDeclaration.append("}\n");
         }
 
         return currentTemplateDeclaration.toString();
     }
 
-
+    /**
+     * Adds boolean values indicating which of the flags that the production has. Unfortunately, you can't loop through the possibilities so _flags is a mapping
+     * @param ctx Text following the ":" in the production which indicates which flags it has
+     */
     private void addFlags(SoarParser.FlagsContext ctx) {
 //        ('o-support' | 'i-support' | 'chunk' | 'default' | 'template' )
         _flags.put("o-support", false);
@@ -901,20 +1115,37 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
     }
 
+    /**
+     * Utility for getConditionOrAssignment to add non null values to the provided StringBuilder
+     * @param variable The variable to be added which will be set equal to the nextElement
+     * @param nextElement The element that the variable will be set equal to
+     * @param conditionOrAssignment Holds the next condition or assignment
+     * @param commaNext Flag that indicates if there will be another assignment after this one
+     */
     private void addNextElement(String variable, String nextElement, StringBuilder conditionOrAssignment, boolean commaNext) {
         if (conditionOrAssignment != null) {
-            conditionOrAssignment.append(variable).append(" = ");
-            if (!nextElement.equals("0")) {
-                conditionOrAssignment.append(nextElement);
-            } else {
-                conditionOrAssignment.append("0");
-            }
+            conditionOrAssignment.append(variable).append(" = ").append(nextElement);
             if (commaNext) {
                 conditionOrAssignment.append(",\n");
             }
         }
     }
 
+    /**
+     * Collects an array that contains all of the conditions or actions needed for the edges
+     * This model was adapted from the MemoryIntensive model.
+     * Todo: Update all of the methods to create these conditions and actions in the visitor pattern instead of having to loop here
+     * @param productionIdentifiers List of identifiers
+     * @param productionAttributes List of attributes
+     * @param productionValues List of values
+     * @param productionValueTemps List of temporary values
+     * @param productionAttributeTemps List of temporary attributes
+     * @param conditionTempToIndex Map from condition temp to its index
+     * @param attributeTempToIndex Map from attribute temp to its index
+     * @param isAssignment Flag that indicates if it is a condition or assignment
+     * @param indexToKickBackCommands Conditions kick back to different locations. This Maps each location to the assignments needed on the kick back location
+     * @return A StringBuilder array. The first row are the regular conditions or assignments. The second row is used for inverse conditions
+     */
     private StringBuilder[][] getConditionOrAssignment(LinkedList<String> productionIdentifiers, LinkedList<String> productionAttributes, LinkedList<String> productionValues, LinkedList<String> productionValueTemps, LinkedList<String> productionAttributeTemps, Map<String, Integer> conditionTempToIndex, Map<String, Integer> attributeTempToIndex, boolean isAssignment, Map<Integer, StringBuilder> indexToKickBackCommands) {
         int size = productionIdentifiers.size();
         for (String nextPossibleFunction : productionValueTemps) {
@@ -1026,17 +1257,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             conditionsOrAssignments[conditionsOrAssignments.length - 1] = new StringBuilder(tempFromLast);
         }
 
-
         return new StringBuilder[][]{conditionsOrAssignments, inverseConditionOrAssignments};
     }
 
+    /**
+     * Sets up the return indexes for the conditions so they know which location to return to to get the next combination
+     * @return Array of indexes for the kick back locations
+     */
     private int[] getKickBackIndexes() {
-        int[] kickBackIndexes = new int[conditionProductionValues.size()];
+        int[] kickBackIndexes = new int[_conditionProductionValues.size()];
         int lastNilAnything = -1;
         int index = 0;
-        for (String nextValue : conditionProductionValues) {
+        for (String nextValue : _conditionProductionValues) {
             kickBackIndexes[index] = lastNilAnything;
-            if (nextValue.equals("nilAnything") || conditionProductionAttributes.get(index).startsWith("noneBut")) {
+            if (nextValue.equals("nilAnything") || _conditionProductionAttributes.get(index).startsWith("noneBut")) {
                 lastNilAnything = index + 1;
             }
             index++;
@@ -1044,20 +1278,26 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return kickBackIndexes;
     }
 
+    /**
+     * Visits the condition and action side of the production to fill the global variables
+     * Also creates the declaration, locations, and edges in the Uppaal document for the template corresponding to the production
+     * @param ctx Individual production
+     * @return Null
+     */
     @Override
     public Node visitSoar_production(SoarParser.Soar_productionContext ctx) {
         _productionVariables = new HashMap<>();
-        conditionSideVariablesToTemps = new HashMap<>();
-        conditionProductionIdentifiers = new LinkedList<>();
-        conditionProductionAttributes = new LinkedList<>();
-        conditionProductionValues = new LinkedList<>();
-        conditionProductionTemp = new LinkedList<>();
-        actionProductionIdentifiers = new LinkedList<>();
-        actionProductionAttributes = new LinkedList<>();
-        actionProductionValues = new LinkedList<>();
-        actionProductionFunctions = new LinkedList<>();
-        attributesToTemps = new HashMap<>();
-        attributeTemps = new LinkedList<>();
+        _conditionSideVariablesToTemps = new HashMap<>();
+        _conditionProductionIdentifiers = new LinkedList<>();
+        _conditionProductionAttributes = new LinkedList<>();
+        _conditionProductionValues = new LinkedList<>();
+        _conditionProductionTemp = new LinkedList<>();
+        _actionProductionIdentifiers = new LinkedList<>();
+        _actionProductionAttributes = new LinkedList<>();
+        _actionProductionValues = new LinkedList<>();
+        _actionProductionFunctions = new LinkedList<>();
+        _attributesToTemps = new HashMap<>();
+        _attributeTemps = new LinkedList<>();
         _latestIndex = 0;
         _flags = new HashMap<>();
         addFlags(ctx.flags());
@@ -1070,9 +1310,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         Location startLocation = makeLocationWithCoordinates(currentTemplate, "Start", startStateID, true, true, -152, 0, -200, -32);
 
         ctx.condition_side().accept(this);
-
         Node actionSide = ctx.action_side().accept(this);
+
         String operatorAssignments = getText(actionSide, "operatorAssignments");
+        // This can probably can be done while the condition and action side of the production are being visited. I collect the different indexes used in the operatorAssignments
         Set<String> operatorIndexes;
         if (operatorAssignments.length() > 0) {
             operatorIndexes = new HashSet<>();
@@ -1092,21 +1333,23 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             operatorIndexes = null;
         }
 
-        Map<String, Integer> conditionTempToIndex = new HashMap<>();
-        Map<String, Integer> attributeTempToIndex = new HashMap<>();
-
         boolean halt = getText(actionSide, "hasHalt").equals("yes");
         boolean needsRetraction = !_productionToOSupported.get(ctx.sym_constant().getText());
 
+        Map<String, Integer> conditionTempToIndex = new HashMap<>();
+        Map<String, Integer> attributeTempToIndex = new HashMap<>();
         currentTemplate.setProperty("declaration", getProductionDeclaration(ctx.sym_constant().getText(), operatorIndexes, conditionTempToIndex, attributeTempToIndex));
 
         int[] lastLocationCoords = new int[2];
         setLastLocationCoords(lastLocationCoords);
         Location lastLocation;
 
+        // The main thing you want is a separation of all the conditions and actions so that the generation of the edges is easy
+        // This next section here is reusing the mechanics from the MemoryIntensiveVersion
+        // Todo: Update all of the methods to create these conditions and actions in the visitor pattern instead of having to loop here
         Map<Integer, StringBuilder> indexToKickBackCommands = new HashMap<>();
-        StringBuilder[][] conditions = getConditionOrAssignment(conditionProductionIdentifiers, conditionProductionAttributes, conditionProductionValues, conditionProductionTemp, attributeTemps, conditionTempToIndex, attributeTempToIndex, false, indexToKickBackCommands);
-        StringBuilder[][] assignments = getConditionOrAssignment(actionProductionIdentifiers, actionProductionAttributes, actionProductionValues, actionProductionFunctions, null, conditionTempToIndex, attributeTempToIndex, true, null);
+        StringBuilder[][] conditions = getConditionOrAssignment(_conditionProductionIdentifiers, _conditionProductionAttributes, _conditionProductionValues, _conditionProductionTemp, _attributeTemps, conditionTempToIndex, attributeTempToIndex, false, indexToKickBackCommands);
+        StringBuilder[][] assignments = getConditionOrAssignment(_actionProductionIdentifiers, _actionProductionAttributes, _actionProductionValues, _actionProductionFunctions, null, conditionTempToIndex, attributeTempToIndex, true, null);
         for (StringBuilder[] nextBuilder : assignments) {
             for (StringBuilder nextAssignment : nextBuilder) {
                 nextAssignment.append(",\naddOperator = true");
@@ -1119,6 +1362,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         String guard;
         String assignment;
         if (!halt) {
+            // This section adds the left branch off the Start location. For retraction, it mirrors the conditions and actions on the right side
+            // For non retraction, it just adds a couple edges off to the left
+            // To follow which location is which, follow the methods which add different locations horizontally or vertically and look at the Names of the locations
             if (needsRetraction) {
                 assignment = "addToStackRetract(" + _templateIndex + "),\nproductionIndexTemp = 0";
                 lastLocation = addHorizontalLocation(currentTemplate, startLocation, lastLocationCoords, "Retract_Conditions", "Run_Rule?", "isRetracting", assignment, true, null);
@@ -1172,7 +1418,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
             }
         }
-
+        // Restores the lastLocationCoords to the start location. If you move the start location, change the constants in this method. Or better yet, hook them up together
         setLastLocationCoords(lastLocationCoords);
 
         lastLocation = addHorizontalLocation(currentTemplate, startLocation, lastLocationCoords, "Run_Guard", "Run_Rule?", "!isRetracting &&\n" + (needsRetraction ? "productionIndex" : "currentNumFiringPerCycle") + " != NUMBER_OF_PRODUCTIONS", "addToStackCondition(" + _templateIndex + ")", false, null);
@@ -1208,10 +1454,15 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
 
         _templateIndex++;
-        _maxConditionSize = Math.max(_maxConditionSize, conditionProductionIdentifiers.size());
+        _maxConditionSize = Math.max(_maxConditionSize, _conditionProductionIdentifiers.size());
         return null;
     }
 
+    /**
+     * Does exactly what the non overridden version would do, but returns null
+     * @param ctx Condition side of the production
+     * @return Null
+     */
     @Override
     public Node visitCondition_side(SoarParser.Condition_sideContext ctx) {
         ctx.state_imp_cond().accept(this);
@@ -1219,23 +1470,43 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
+    /**
+     * Utility function that generates a new node and gives it the provided property with the provided value
+     * @param property Property that the new node should get
+     * @param text Value for the property
+     * @return The newly generated Node
+     */
     private Node textAsNode(String property, String text) {
         Node node = generateNode();
         node.setProperty(property, text);
         return node;
     }
 
+    /**
+     * Gets the value of the provided property from the provided Node.
+     * @param accept Node from which the property should be retrieved
+     * @param property Property that should be retrieved
+     * @return Value of the property from the accept Node
+     */
     private String getText(Node accept, String property) {
         return (String) accept.getProperty(property).getValue();
     }
 
+    /**
+     * Creates a new template in the global Document
+     * @return The newly generated Template which is a Node
+     */
     private Node generateNode() {
         return ourDocument.createTemplate();
     }
 
+    /**
+     * Visits the state condition using the utility method innerConditionVisit which is shared with the other conditions
+     * @param ctx State condition of production
+     * @return Null
+     */
     @Override
     public Node visitState_imp_cond(SoarParser.State_imp_condContext ctx) {
-
         String productionName = ((SoarParser.Soar_productionContext) ctx.parent.parent).sym_constant().getText();
         String idTest = ctx.id_test().getText();
         Map<String, String> localVariableDictionary = _variableDictionary.get(productionName);
@@ -1247,7 +1518,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
-    private String getVaribleFromConjunctive(SoarParser.Conjunctive_testContext ctx) {
+    /**
+     * Retrieves the variable from inside a conjunctive test because it can be anywhere in the test
+     * @param ctx The conjunctive test
+     * @return The variable that the test will bind to
+     */
+    private String getVariableFromConjunctive(SoarParser.Conjunctive_testContext ctx) {
         String variable = null;
         for (SoarParser.Simple_testContext simple_testContext : ctx.simple_test()) {
             if (simple_testContext.relational_test() != null && simple_testContext.relational_test().relation() == null) {
@@ -1258,6 +1534,14 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return variable;
     }
 
+    /**
+     * Main method for processing a condition. Utility used by all of the conditions
+     * @param attrValueTestsCtxs List of all the attribute value tests
+     * @param localVariableDictionary Map from variable to its path
+     * @param idTest Identifier for the condition
+     * @param localActualVariables Keeps track of which variables that are found are actually variables and which are later identifiers
+     * @param attributeVariableToArrayName Map from a variable (attribute) to the name of the noneBut array that contains the values that it has to match
+     */
     private void innerConditionVisit(List<SoarParser.Attr_value_testsContext> attrValueTestsCtxs, Map<String, String> localVariableDictionary, String idTest, ProductionVariables localActualVariables, Map<String, String> attributeVariableToArrayName) {
         // Variable in left hand side
         if (localVariableDictionary.containsKey(idTest)) {
@@ -1268,59 +1552,62 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 if (localVariableDictionary.get(idTest).equals("state")) {
                     lastVariable = "_state";
                 } else {
-                    lastVariable = conditionSideVariablesToTemps.get(idTest);
+                    lastVariable = _conditionSideVariablesToTemps.get(idTest);
                 }
 
+                // This hasn't been fully tested. It likely is currently broken.  It is used when you have attribute.attribute.attribute etc.
+                // For each of them, you need a new condition that connects them all
+                // todo: Fully test this to make sure it works
                 for (int i = 0; i < attributeCtx.attr_test().size() - 1; i++) {
                     String attributeText = attributeCtx.attr_test(i).getText();
-                    conditionProductionIdentifiers.add(attributeText.equals("operator") ? "finalOp" : lastVariable);
-                    conditionProductionAttributes.add(attributeText);
-                    conditionProductionValues.add("nilAnything");
+                    _conditionProductionIdentifiers.add(attributeText.equals("operator") ? "finalOp" : lastVariable);
+                    _conditionProductionAttributes.add(attributeText);
+                    _conditionProductionValues.add("nilAnything");
                     String withoutTempVariable = lastVariable + "_" + attributeText;
                     String dummyVariable = "dummy" + (withoutTempVariable.charAt(0) != '_' ? "_" : "") + withoutTempVariable;
-                    conditionProductionTemp.add(dummyVariable);
+                    _conditionProductionTemp.add(dummyVariable);
                     String newTempVariable = withoutTempVariable + "_temp";
                     _productionVariables.put(dummyVariable, newTempVariable);
-                    conditionSideVariablesToTemps.put(dummyVariable, dummyVariable);
+                    _conditionSideVariablesToTemps.put(dummyVariable, dummyVariable);
                     lastVariable = dummyVariable;
-                    attributeTemps.add("0");
+                    _attributeTemps.add("0");
                 }
 
                 String attrPath = attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).getText();
-                String dummyValue = conditionSideVariablesToTemps.get(attrPath);
+                String dummyValue = _conditionSideVariablesToTemps.get(attrPath);
                 if (dummyValue != null) {
                     attrPath = dummyValue;
                 } else if (attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test() != null) {
-                    attrPath = getVaribleFromConjunctive(attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test());
-                    if (attributesToTemps.get(attrPath) == null) {
+                    attrPath = getVariableFromConjunctive(attributeCtx.attr_test(attributeCtx.attr_test().size() - 1).test().conjunctive_test());
+                    if (_attributesToTemps.get(attrPath) == null) {
                         String dummy = "dummy_state_" + SoarTranslator.simplifiedString(attrPath);
-                        attributesToTemps.put(attrPath, dummy);
+                        _attributesToTemps.put(attrPath, dummy);
                     }
-                    attributeTemps.add(0, attributesToTemps.get(attrPath));
-                    conditionProductionIdentifiers.add(0, "0");
-                    conditionProductionAttributes.add(0, attributeVariableToArrayName.get(attrPath));
-                    conditionProductionValues.add(0, "-1");
-                    conditionProductionTemp.add(0, "0");
+                    _attributeTemps.add(0, _attributesToTemps.get(attrPath));
+                    _conditionProductionIdentifiers.add(0, "0");
+                    _conditionProductionAttributes.add(0, attributeVariableToArrayName.get(attrPath));
+                    _conditionProductionValues.add(0, "-1");
+                    _conditionProductionTemp.add(0, "0");
                     _latestIndex++;
 
-                    attrPath = attributesToTemps.get(attrPath);
-                } else if (attributesToTemps.get(attrPath) != null) {
-                    attrPath = attributesToTemps.get(attrPath);
+                    attrPath = _attributesToTemps.get(attrPath);
+                } else if (_attributesToTemps.get(attrPath) != null) {
+                    attrPath = _attributesToTemps.get(attrPath);
                 } else {
                     attrPath = SoarTranslator.simplifiedString(attrPath);
                 }
 
-                conditionProductionIdentifiers.add(_flags.get("chunk") || !attrPath.equals("operator") ? lastVariable : "finalOp");
-                conditionProductionAttributes.add(attrPath);
-                if (attributeTemps.size() < conditionProductionIdentifiers.size()) {
-                    attributeTemps.add("0");
+                _conditionProductionIdentifiers.add(_flags.get("chunk") || !attrPath.equals("operator") ? lastVariable : "finalOp");
+                _conditionProductionAttributes.add(attrPath);
+                if (_attributeTemps.size() < _conditionProductionIdentifiers.size()) {
+                    _attributeTemps.add("0");
                 }
 
                 String value;
 
                 if (attributeCtx.getText().startsWith("-^")) {
-                    conditionProductionValues.add("EMPTY");
-                    conditionProductionTemp.add("0");
+                    _conditionProductionValues.add("EMPTY");
+                    _conditionProductionTemp.add("0");
                 } else {
                     int numberOfValues = attributeCtx.value_test().size();
 
@@ -1343,18 +1630,18 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
                             if (relationAndRightTerm.getProperty("var") != null) {
                                 rightTerm = getText(relationAndRightTerm, "var");
-                                if (conditionSideVariablesToTemps.get(rightTerm) == null) {
+                                if (_conditionSideVariablesToTemps.get(rightTerm) == null) {
                                     value = "nilAnything";
                                     String withoutTempVariable = SoarTranslator.simplifiedString(localVariableDictionary.get(rightTerm) + "_" + rightTerm);
                                     String dummyVariable = "dummy_" + withoutTempVariable;
-                                    conditionSideVariablesToTemps.put(rightTerm, dummyVariable);
-                                    conditionProductionTemp.add(dummyVariable);
+                                    _conditionSideVariablesToTemps.put(rightTerm, dummyVariable);
+                                    _conditionProductionTemp.add(dummyVariable);
                                     if (localActualVariables.variablesContains(rightTerm)) {
                                         String newTempVariable = withoutTempVariable + "_temp";
                                         _productionVariables.put(rightTerm, newTempVariable);
                                     }
                                 } else {
-                                    value = conditionSideVariablesToTemps.get(rightTerm);
+                                    value = _conditionSideVariablesToTemps.get(rightTerm);
                                 }
                             } else {
                                 rightTerm = getText(relationAndRightTerm, "const");
@@ -1362,50 +1649,64 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                             }
 
                            if (value.length() > 0) {
+                               // At the moment, the selection of the nilAnythings are prioritized to the front
+                               // The order that the conditions can be optimized so that they don't have to be tested as much
+                               // todo: Optimize the order that the conditions are checked
                                 if (value.equals("nilAnything")) {
-                                    conditionProductionValues.add(_latestIndex, value);
-                                    conditionProductionIdentifiers.add(_latestIndex, conditionProductionIdentifiers.removeLast());
-                                    conditionProductionAttributes.add(_latestIndex, conditionProductionAttributes.removeLast());
-                                    conditionProductionTemp.add(_latestIndex, conditionProductionTemp.removeLast());
-                                    attributeTemps.add(_latestIndex, attributeTemps.removeLast());
+                                    _conditionProductionValues.add(_latestIndex, value);
+                                    _conditionProductionIdentifiers.add(_latestIndex, _conditionProductionIdentifiers.removeLast());
+                                    _conditionProductionAttributes.add(_latestIndex, _conditionProductionAttributes.removeLast());
+                                    _conditionProductionTemp.add(_latestIndex, _conditionProductionTemp.removeLast());
+                                    _attributeTemps.add(_latestIndex, _attributeTemps.removeLast());
                                     _latestIndex++;
                                 } else {
-                                    conditionProductionValues.add(value);
-                                    conditionProductionTemp.add("0");
+                                    _conditionProductionValues.add(value);
+                                    _conditionProductionTemp.add("0");
                                 }
                                 if (relations != null) {
-                                    String identifier = conditionProductionTemp.get(_latestIndex - 1);
+                                    String identifier = _conditionProductionTemp.get(_latestIndex - 1);
                                     for(int i = 0; i < relations.length; i++) {
-                                        conditionProductionIdentifiers.add(_latestIndex, identifier);
-                                        conditionProductionAttributes.add(_latestIndex, "extraRestriction");
-                                        conditionProductionValues.add(_latestIndex, variablesForRelations[i]);
-                                        conditionProductionTemp.add(_latestIndex, relations[i]);
-                                        attributeTemps.add(_latestIndex, "0");
+                                        _conditionProductionIdentifiers.add(_latestIndex, identifier);
+                                        _conditionProductionAttributes.add(_latestIndex, "extraRestriction");
+                                        _conditionProductionValues.add(_latestIndex, variablesForRelations[i]);
+                                        _conditionProductionTemp.add(_latestIndex, relations[i]);
+                                        _attributeTemps.add(_latestIndex, "0");
                                         _latestIndex++;
                                     }
                                 }
                             }
-                        } else if (relationAndRightTerm.getProperty("disjunction") != null) {
-                            //FIXFIXFIX
                         }
-                    } else {
-                        // use "path_to_var[index] = constant" pattern
                     }
                 }
             }
         }
     }
 
+    /**
+     * Does what the non overridden one does right now.  This will need to be expanded to handle larger negated groups of conditions
+     * @param ctx Condition on the condition side of the production
+     * @return The result of visiting the positive condition
+     */
     @Override
     public Node visitCond(SoarParser.CondContext ctx) {
         return ctx.positive_cond().accept(this);
     }
 
+    /**
+     * Visits the condition with one id. Ignores conjunctive groups of conditions at the moment
+     * @param ctx Either a conjunctive group of conditions or one condition for one id
+     * @return The result from visiting conds for one id
+     */
     @Override
     public Node visitPositive_cond(SoarParser.Positive_condContext ctx) {
         return ctx.conds_for_one_id().accept(this);
     }
 
+    /**
+     * Mirror image of state implicit condition. For each condition it uses the utility function innerConditionVisit
+     * @param ctx Condition on the condition side of a production
+     * @return Null
+     */
     @Override
     public Node visitConds_for_one_id(SoarParser.Conds_for_one_idContext ctx) {
         String productionName = ((SoarParser.Soar_productionContext) ctx.parent.parent.parent.parent).sym_constant().getText();
@@ -1419,31 +1720,62 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
+    /**
+     * Don't want to do any visiting with this component yet so it just returns null
+     * @param ctx Identifier for a condition
+     * @return Null
+     */
     @Override
     public Node visitId_test(SoarParser.Id_testContext ctx) {
         return null;
     }
 
+    /**
+     * Don't want to do any visiting with this component yet so it just returns null.
+     * This would do what innerConditionVisit does, but you can pass arguments to innerConditionVisit and you can't here
+     * @param ctx Attributes and vlues
+     * @return Null
+     */
     @Override
     public Node visitAttr_value_tests(SoarParser.Attr_value_testsContext ctx) {
         return null;
     }
 
+    /**
+     * Don't want to do any visiting with this component yet so it just returns null
+     * @param ctx Test
+     * @return Null
+     */
     @Override
     public Node visitAttr_test(SoarParser.Attr_testContext ctx) {
         return null;
     }
 
+    /**
+     * Just visits whichever child is in there. There will only ever be one child
+     * @param ctx Test or condition for one id
+     * @return The result from visiting the child
+     */
     @Override
     public Node visitValue_test(SoarParser.Value_testContext ctx) {
         return ctx.children.get(0).accept(this);
     }
 
+    /**
+     * A test is one of three options: conjunctive_test | simple_test | multi_value_test so it visits whichever is there
+     * @param ctx Either conjunctive_test, simple_test, or multi_value_test
+     * @return The result from visiting the children
+     */
     @Override
     public Node visitTest(SoarParser.TestContext ctx) {
         return ctx.children.get(0).accept(this);
     }
 
+    /**
+     * Implemented for the use with attribute conjunctive tests and probably value conjunctive tests. This would need to be expanded before use with conjunctive groups of conditions
+     * @param ctx Group of simple tests
+     * @return Node with the lower components added
+     */
     @Override
     public Node visitConjunctive_test(SoarParser.Conjunctive_testContext ctx) {
         Node returnNode = textAsNode("setOfRel", "");
@@ -1471,21 +1803,41 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnNode;
     }
 
+    /**
+     * Visits its child either a disjunction_test or a relational_test
+     * @param ctx Disjunction test or relational test
+     * @return The result of visiting its child
+     */
     @Override
     public Node visitSimple_test(SoarParser.Simple_testContext ctx) {
         return ctx.children.get(0).accept(this);
     }
 
+    /**
+     * Not implemented yet so it returns null
+     * @param ctx Group of int constants
+     * @return Null
+     */
     @Override
     public Node visitMulti_value_test(SoarParser.Multi_value_testContext ctx) {
         return null;
     }
 
+    /**
+     * SymbolVisitor takes care of this method right now so it doesn't need to do anything in this class
+     * @param ctx Group of constants that a variable must match to at least one of
+     * @return Null
+     */
     @Override
     public Node visitDisjunction_test(SoarParser.Disjunction_testContext ctx) {
         return null;
     }
 
+    /**
+     * Visits children which are the single_test and optional relation
+     * @param ctx Value (simple_test) with an optional relation
+     * @return A Node that contains the properties from the lower visits
+     */
     @Override
     public Node visitRelational_test(SoarParser.Relational_testContext ctx) {
         Node relationNode = ctx.single_test().accept(this);
@@ -1496,6 +1848,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return relationNode;
     }
 
+    /**
+     * Uses relationToText from UtilityForVisitors to get the String representation of the relation and sets it as a property of the return Node
+     * @param ctx Relation
+     * @return A Node with relation under "rel" property
+     */
     @Override
     public Node visitRelation(SoarParser.RelationContext ctx) {
 
@@ -1507,16 +1864,31 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnTree;
     }
 
+    /**
+     * Visits its child either a variable or a constant
+     * @param ctx Either a variable or constant
+     * @return The result of visiting its child
+     */
     @Override
     public Node visitSingle_test(SoarParser.Single_testContext ctx) {
         return ctx.children.get(0).accept(this);
     }
 
+    /**
+     * Sets the text of the variable under "var"
+     * @param ctx The variable
+     * @return A new node with the variable under "var" property
+     */
     @Override
     public Node visitVariable(SoarParser.VariableContext ctx) {
         return textAsNode("var", ctx.getText());
     }
 
+    /**
+     * Simplifies and stores the constant under "const" property
+     * @param ctx Constant
+     * @return A Node with the constant under "const" property
+     */
     @Override
     public Node visitConstant(SoarParser.ConstantContext ctx) {
         String result = SoarTranslator.simplifiedString(ctx.getText());
@@ -1527,6 +1899,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return textAsNode("const", result);
     }
 
+    /**
+     * Collects together all of the operatorAssignments and visits the individual actions
+     * @param ctx Action side of the production
+     * @return A Node with the operatorAssignments under "operatorAssignments" property and whether the production calls halt under "hasHalt"
+     */
     @Override
     public Node visitAction_side(SoarParser.Action_sideContext ctx) {
         StringBuilder operatorAssignments = new StringBuilder();
@@ -1560,6 +1937,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnNode;
     }
 
+    /**
+     * Retrieves information from the global variables and uses innerVisitAction
+     * @param ctx Action on the action side of the production
+     * @return Any of the operatorAssignments found in the innerVisitAction
+     */
     @Override
     public Node visitAction(SoarParser.ActionContext ctx) {
         String productionName = ((SoarParser.Soar_productionContext) ctx.parent.parent).sym_constant().getText();
@@ -1571,9 +1953,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnNode;
     }
 
+    /**
+     * Visits and separates the components of the actions
+     * @param ctxs The attribute and values of the actions
+     * @param variableName Name of the identifier
+     * @param localVariablePathsWithID Map from variable name to path with ID
+     * @return The operator assignments found during the method
+     */
     private String innerVisitAction(List<SoarParser.Attr_value_makeContext> ctxs, String variableName, Map<String, String> localVariablePathsWithID) {
         LinkedList<String> operatorCollection = new LinkedList<>();
-        String variable = conditionSideVariablesToTemps.get(variableName);
+        String variable = _conditionSideVariablesToTemps.get(variableName);
         if (variable == null) {
             String pathWithId = localVariablePathsWithID.get(variableName);
             int index = Integer.parseInt(pathWithId.substring(pathWithId.lastIndexOf("_") + 1));
@@ -1586,26 +1975,28 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
 
         for (SoarParser.Attr_value_makeContext attrCtx : ctxs) {
+            // Doesn't handle the "." notation yet
             String attribute = attrCtx.variable_or_sym_constant(attrCtx.variable_or_sym_constant().size() - 1).getText();
-            if (attributesToTemps.get(attribute) != null) {
-                attribute = attributesToTemps.get(attribute);
+            if (_attributesToTemps.get(attribute) != null) {
+                attribute = _attributesToTemps.get(attribute);
             } else {
                 attribute = SoarTranslator.simplifiedString(attribute);
             }
 
+            // Again this can be reworked for this methodology instead of reusing the methodology for the MemoryIntensive model
             for (SoarParser.Value_makeContext value_makeContext : attrCtx.value_make()) {
-                actionProductionIdentifiers.add(variable);
-                actionProductionAttributes.add(attribute);
-                attributeTemps.add("0");
+                _actionProductionIdentifiers.add(variable);
+                _actionProductionAttributes.add(attribute);
+                _attributeTemps.add("0");
 
                 Node rightSideElement = value_makeContext.accept(this);
                 String rightSide = determineAssignment(rightSideElement, localVariablePathsWithID);
                 if (rightSideElement.getProperty("expr") != null) {
-                    actionProductionIdentifiers.add("0");
-                    actionProductionAttributes.add("0");
-                    actionProductionValues.add(getText(rightSideElement, "secondValue"));
-                    actionProductionFunctions.add("0");
-                    attributeTemps.add("0");
+                    _actionProductionIdentifiers.add("0");
+                    _actionProductionAttributes.add("0");
+                    _actionProductionValues.add(getText(rightSideElement, "secondValue"));
+                    _actionProductionFunctions.add("0");
+                    _attributeTemps.add("0");
                 }
 
                 if (rightSide != null) {
@@ -1617,6 +2008,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return operatorCollection.stream().collect(Collectors.joining(",\n"));
     }
 
+    /**
+     * Returns either the index if it is a number already or the method call with the index to get the number during run time of Uppaal
+     * @param index Index to be checked
+     * @return The index that Uppaal will use
+     */
     private String getOperatorIndex(String index) {
         try {
             Integer.parseInt(index);
@@ -1626,6 +2022,12 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         }
     }
 
+    /**
+     * Accesses the operator related to the index provided and accesses the provided parameter
+     * @param index Index of the operator to be accessed
+     * @param parameter Component of the operator to be accessed
+     * @return Concatenated String with the default way to access the operator and parameter
+     */
     private String operatorBaseString(String index, String parameter) {
         StringBuilder returnString = new StringBuilder();
         returnString.append("operators[");
@@ -1636,13 +2038,22 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnString.toString();
     }
 
+    /**
+     * Cycles the lists to prioritize removing memory elements before adding new ones
+     */
     private void shiftLists() {
-        actionProductionIdentifiers.addFirst(actionProductionIdentifiers.removeLast());
-        actionProductionAttributes.addFirst(actionProductionAttributes.removeLast());
-        actionProductionValues.addFirst(actionProductionValues.removeLast());
-        actionProductionFunctions.addFirst(actionProductionFunctions.removeLast());
+        _actionProductionIdentifiers.addFirst(_actionProductionIdentifiers.removeLast());
+        _actionProductionAttributes.addFirst(_actionProductionAttributes.removeLast());
+        _actionProductionValues.addFirst(_actionProductionValues.removeLast());
+        _actionProductionFunctions.addFirst(_actionProductionFunctions.removeLast());
     }
 
+    /**
+     * Gets variable from temporary variables or its path in the local map
+     * @param text The variable to be found
+     * @param localVariablePathsWithID Map from variable to its path with ID
+     * @return Dummy variable or the provided variables path
+     */
     private String getVariable(String text, Map<String, String> localVariablePathsWithID) {
         String variable = _productionVariables.get(text);
         if (variable == null) {
@@ -1651,13 +2062,21 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return variable;
     }
 
+    /**
+     * Handles all of the cases that the value can be
+     * @param rightSideElement Node returned by visiting the value
+     * @param localVariablePathsWithID Map from variable name to path with ID
+     * @return Any operator assignments found
+     */
     private String determineAssignment(Node rightSideElement, Map<String, String> localVariablePathsWithID) {
         String rightSide = null;
         if (rightSideElement != null) {
+            // This is a function
             if (rightSideElement.getProperty("expr") != null) {
-                actionProductionValues.add(getText(rightSideElement, "firstValue"));
-                actionProductionFunctions.add(getText(rightSideElement, "expr"));
+                _actionProductionValues.add(getText(rightSideElement, "firstValue"));
+                _actionProductionFunctions.add(getText(rightSideElement, "expr"));
             } else if (rightSideElement.getProperty("pref") != null) {
+                // The value is being removed from memory
                 if (getText(rightSideElement, "pref").equals("remove")) {
                     String rightSideVarOrConst = getText(rightSideElement, "constVarExpr");
                     String variableOrConst;
@@ -1665,24 +2084,25 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         variableOrConst = getText(rightSideElement, "const");
                     } else {
                         rightSideVarOrConst = getText(rightSideElement, "var");
-                        variableOrConst = conditionSideVariablesToTemps.get(rightSideVarOrConst);
+                        variableOrConst = _conditionSideVariablesToTemps.get(rightSideVarOrConst);
                         if (variableOrConst == null) {
                             variableOrConst = getVariable(rightSideVarOrConst, localVariablePathsWithID);
                         }
                     }
-                    actionProductionValues.add(variableOrConst);
-                    actionProductionFunctions.add("remove");
+                    _actionProductionValues.add(variableOrConst);
+                    _actionProductionFunctions.add("remove");
                     shiftLists();
+                // The value is an operator with preferences
                 } else {
                     String operatorIndex = getIndexFromID(getText(rightSideElement, "var"), localVariablePathsWithID);
 
                     try {
                         Integer.parseInt(operatorIndex);
-                        actionProductionValues.add(getVariable(getText(rightSideElement, "var"), localVariablePathsWithID));
+                        _actionProductionValues.add(getVariable(getText(rightSideElement, "var"), localVariablePathsWithID));
                     } catch (NumberFormatException e) {
-                        actionProductionIdentifiers.removeLast();
-                        actionProductionAttributes.removeLast();
-                        attributeTemps.removeLast();
+                        _actionProductionIdentifiers.removeLast();
+                        _actionProductionAttributes.removeLast();
+                        _attributeTemps.removeLast();
                     }
 
                     if (getText(rightSideElement, "pref").equals("unary")) {
@@ -1712,43 +2132,65 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         }
                     }
                 }
+            //Otherwise, it is a normal constant or variable
             } else if (rightSideElement.getProperty("const") != null) {
-                actionProductionValues.add(getText(rightSideElement, "const"));
+                _actionProductionValues.add(getText(rightSideElement, "const"));
             } else if (rightSideElement.getProperty("var") != null) {
                 String rightSideVar = getText(rightSideElement, "var");
-                String variable = conditionSideVariablesToTemps.get(rightSideVar);
+                String variable = _conditionSideVariablesToTemps.get(rightSideVar);
                 if (variable == null) {
                     variable = SoarTranslator.simplifiedString(getVariable(rightSideVar, localVariablePathsWithID));
                 }
-                actionProductionValues.add(variable);
+                _actionProductionValues.add(variable);
             }
         }
-        if (actionProductionFunctions.size() < actionProductionValues.size()) {
-            actionProductionFunctions.add("0");
+        if (_actionProductionFunctions.size() < _actionProductionValues.size()) {
+            _actionProductionFunctions.add("0");
         }
         return rightSide;
     }
 
+    /**
+     * Generates text for function call in Uppaal. Used for addBetterTo and addUnaryIndifferentTo
+     * @param function Name of the function
+     * @param index1 Value of the first index
+     * @param index2 Value of the second index
+     * @return A concatenated String that Uppaal can recognize
+     */
     private String functionCallWithTwoIDs(String function, String index1, String index2) {
         return function + "(" + index1 + ", " + index2 + ")";
     }
 
-
+    /**
+     * Uppaal doesn't provide output so right now print strings are ignored. They are helpful in Soar to keep track of where the Soar agent is
+     * @param ctx Print String outputted by the Soar agent
+     * @return Null
+     */
     @Override
     public Node visitPrint(SoarParser.PrintContext ctx) {
         return null;
     }
 
+    /**
+     * Gets the constant or dummy variable
+     * @param ctx Constant | function call | Variable
+     * @return The constant or dummy variable
+     */
     private String getVariableOrTemp(SoarParser.ValueContext ctx) {
         StringBuilder variableOrTemp = new StringBuilder();
         if (ctx.variable() == null) {
             variableOrTemp.append(SoarTranslator.simplifiedString(ctx.constant().getText()));
-        } else if (conditionSideVariablesToTemps.get(ctx.variable().getText()) != null) {
-            variableOrTemp.append(conditionSideVariablesToTemps.get(ctx.variable().getText()));
+        } else if (_conditionSideVariablesToTemps.get(ctx.variable().getText()) != null) {
+            variableOrTemp.append(_conditionSideVariablesToTemps.get(ctx.variable().getText()));
         }
         return variableOrTemp.toString();
     }
 
+    /**
+     * Collects the components of the function call to be analyzed above
+     * @param ctx Function call with two values and symbol for function
+     * @return Node with the name of the function in "expr" property and the two values under the "firstValue" and "secondValue" properties
+     */
     @Override
     public Node visitFunc_call(SoarParser.Func_callContext ctx) {
         SoarParser.ValueContext leftContext = ctx.value(0);
@@ -1778,11 +2220,21 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return returnNode;
     }
 
+    /**
+     * I handled the switch statement in the Func_call. It could probably be moved to this method
+     * @param ctx Name of the function
+     * @return Null
+     */
     @Override
     public Node visitFunc_name(SoarParser.Func_nameContext ctx) {
         return null;
     }
 
+    /**
+     * Visits the child which is a constant, variable, or function call and stores an additional component to let the higher components which one it is
+     * @param ctx Constant, variable, or function call
+     * @return Node with the result of visiting the child along with a property "constVarExpr" which tells you if it is a constant, variable, or function call respecitively
+     */
     @Override
     public Node visitValue(SoarParser.ValueContext ctx) {
         Node returnNode = ctx.children.get(0).accept(this);
@@ -1799,27 +2251,21 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     }
 
-    @Override
-    public Node visitAttr_value_make(SoarParser.Attr_value_makeContext ctx) {
-        String leftSide = ctx.variable_or_sym_constant()
-                .stream()
-                .map(RuleContext::getText)
-                .collect(Collectors.joining("_"));
-
-        Node rightSide = ctx.value_make(0).accept(this);
-
-        if (rightSide == null) {
-            return generateNode();
-        } else {
-            return textAsNode("name", leftSide + " = " + getText(rightSide, "name"));
-        }
-    }
-
+    /**
+     * Not needed yet since I usually just need the text. Does nothing right now
+     * @param ctx Attribute component for actions
+     * @return Null
+     */
     @Override
     public Node visitVariable_or_sym_constant(SoarParser.Variable_or_sym_constantContext ctx) {
         return null;
     }
 
+    /**
+     * Visits the value and any optional preferences that it has
+     * @param ctx Value with its preferences if it is an operator
+     * @return A Node with the value and its preferences as properties to be analyzed above
+     */
     @Override
     public Node visitValue_make(SoarParser.Value_makeContext ctx) {
         Node value = ctx.value().accept(this);
@@ -1845,6 +2291,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return value;
     }
 
+    /**
+     * Collects all the unary preferences together
+     * @param ctx Value make context includes value and its preferences
+     * @return The collection of unary preferences separated by commas
+     */
     private String getPreferenceCollection(SoarParser.Value_makeContext ctx) {
         StringBuilder preferences = new StringBuilder();
         for (SoarParser.Value_pref_clauseContext value_pref_clauseContext : ctx.value_pref_clause()) {
@@ -1856,11 +2307,17 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return preferences.toString();
     }
 
+    /**
+     * Retrieves either the dummy variable associated with this variable or the index which is attached to the end of the path
+     * @param variableName Name of the variable
+     * @param localVariablePathsWithID Map from variable to its path with ID
+     * @return Index of the variable or its temporary value used by Uppaal
+     */
     private String getIndexFromID(String variableName, Map<String, String> localVariablePathsWithID) {
         String pathWithID = localVariablePathsWithID.get(variableName);
         String index;
         if (pathWithID == null) {
-            index = conditionSideVariablesToTemps.get(variableName);
+            index = _conditionSideVariablesToTemps.get(variableName);
         } else {
             int indexOfLast_ = pathWithID.lastIndexOf("_");
             index = (Integer.parseInt(pathWithID.substring(indexOfLast_ + 1)) - 1) + "";
@@ -1868,6 +2325,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return index;
     }
 
+    /**
+     * Binary preference with a second value to which the binary preference belongs. I haven't handled commas yet which separate preferences
+     * @param ctx Binary preference with second value
+     * @return Node with preferences as properties to be analyzed above
+     */
     @Override
     public Node visitValue_pref_binary_value(SoarParser.Value_pref_binary_valueContext ctx) {
         Node valuePrefNode = null;
@@ -1895,6 +2357,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return valuePrefNode;
     }
 
+    /**
+     * Uses unaryToString in UtilityForVisitors to retrieve the String equivalent of the preference symbol and adds it as property to be analyzed above
+     * @param ctx Unary preference
+     * @return Node with the unary preference as a property "unaryPref"
+     */
     @Override
     public Node visitUnary_pref(SoarParser.Unary_prefContext ctx) {
         Node prefNode = null;
@@ -1905,6 +2372,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return prefNode;
     }
 
+    /**
+     * These symbols can be unary or binary preferences. To know which, I use a global flag and the method unaryOrBinaryToString in UtilityForVisitors
+     * @param ctx Unary Or Binary preference
+     * @return Node with the unary or binary preference as a property "unaryBinaryPref"
+     */
     @Override
     public Node visitUnary_or_binary_pref(SoarParser.Unary_or_binary_prefContext ctx) {
         Node prefNode = null;
@@ -1915,6 +2387,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return prefNode;
     }
 
+    /**
+     * The preference found here is a unary preference which is retrieved and stored to be analyzed above
+     * @param ctx Unary preference
+     * @return A Node with the preference stored as a property "unaryPref"
+     */
     public Node visitValue_pref_clause(SoarParser.Value_pref_clauseContext ctx) {
         String preference = null;
         if (ctx.unary_or_binary_pref() != null) {
@@ -1928,6 +2405,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return textAsNode("unaryPref", preference);
     }
 
+    /**
+     * I just use the text so this method doesn't need to do anything
+     * @param ctx Combination of letters and numbers
+     * @return Null
+     */
     @Override
     public Node visitSym_constant(SoarParser.Sym_constantContext ctx) {
         return null;
@@ -1953,6 +2435,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return null;
     }
 
+    /**
+     * Creates a new Template and stores it in the Document
+     * @param name Name of the new Template
+     * @return The new Template
+     */
     private Template makeTemplate(String name) {
         Template t = ourDocument.createTemplate();
         ourDocument.insert(t, _lastTemplate);
@@ -1961,72 +2448,126 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return t;
     }
 
-    private Location makeLocation(Template t, String name, String ID, boolean committed, boolean init) {
-        Location l = t.createLocation();
-        t.insert(l, t.getLast());
+    /**
+     * Creates a new location under the provided template with the given name, ID, and with the provided properties
+     * @param currentTemplate Template to which the Location is being added
+     * @param name Name of the Location to be made
+     * @param ID Each location needs a unique ID, this is the ID of the location
+     * @param committed If true, makes the location committed
+     * @param init If true, marks the Location as the initial location (limit 1 per template)
+     * @return The newly created Location
+     */
+    private Location makeLocation(Template currentTemplate, String name, String ID, boolean committed, boolean init) {
+        Location newLocation = currentTemplate.createLocation();
+        currentTemplate.insert(newLocation, currentTemplate.getLast());
         if (name != null) {
-            l.setProperty("name", name);
+            newLocation.setProperty("name", name);
         }
-        l.setProperty("id", "id" + ID);
+        newLocation.setProperty("id", "id" + ID);
         if (committed) {
-            l.setProperty("committed", true);
+            newLocation.setProperty("committed", true);
         }
         if (init) {
-            l.setProperty("init", true);
+            newLocation.setProperty("init", true);
         }
-        return l;
+        return newLocation;
     }
 
-    private Location makeLocationWithCoordinates(Template t, String name, String ID, boolean committed, boolean init, int x, int y, Integer nameX, Integer nameY) {
-        Location ret = makeLocation(t, name, ID, committed, init);
-        ret.setProperty("x", x);
-        ret.setProperty("y", y);
+    /**
+     * Creates a new Location with the given coordinates
+     * @param currentTemplate Template to which the Location is being added
+     * @param name Name of the Location to be made
+     * @param ID Each location needs a unique ID, this is the ID of the location
+     * @param committed If true, makes the location committed
+     * @param init If true, marks the Location as the initial location (limit 1 per template)
+     * @param x X coordinate of the Location
+     * @param y Y coordinate of the Location
+     * @param nameX X coordinate of the name of the Location
+     * @param nameY Y coordinate of the name of the Location
+     * @return The newly created Location
+     */
+    private Location makeLocationWithCoordinates(Template currentTemplate, String name, String ID, boolean committed, boolean init, int x, int y, Integer nameX, Integer nameY) {
+        Location newLocation = makeLocation(currentTemplate, name, ID, committed, init);
+        newLocation.setProperty("x", x);
+        newLocation.setProperty("y", y);
         if (nameX != null) {
-            Property nameProperty = ret.getProperty("name");
+            Property nameProperty = newLocation.getProperty("name");
             nameProperty.setProperty("x", nameX);
             nameProperty.setProperty("y", nameY);
         }
-        return ret;
+        return newLocation;
     }
 
-    private Edge makeEdge(Template t, Location source, Location target, String select, Integer[] selectXY, String synchronisation, Integer[] synchronisationXY, String guard, Integer[] guardXY, String assignment, Integer[] assignmentXY) {
-        Edge e = t.createEdge();
-        t.insert(e, t.getLast());
-        e.setSource(source);
-        e.setTarget(target);
+    /**
+     * Creates an edge from the source to the target provided Locations with the components provided
+     * @param currentTemplate Template to which the Location is being added
+     * @param source Location from which the edge with extend
+     * @param target Location to which the edge will be directed to
+     * @param select Text for the select component of the edge. If null, there won't be any select on the edge
+     * @param selectXY Coordinates for the select component of the edge. If select is null, it doesn't matter what is provided here
+     * @param synchronisation Text for the synchronisation component of the edge. If null, there won't be any synchronisation on the edge
+     * @param synchronisationXY Coordinates for the synchronisation component of the edge. If synchronisation is null, it doesn't matter what is provided here
+     * @param guard Text for the guard component of the edge. If null, there won't be any guard on the edge
+     * @param guardXY Coordinates for the guard component of the edge. If guard is null, it doesn't matter what is provided here
+     * @param assignment Text for the assignmnet component of the edge. If null, there won't be any assignment on the edge
+     * @param assignmentXY Coordinates for the assignment component on the edge. If assignment is null, it doesn't matter what is provided here
+     * @return The newly created edge
+     */
+    private Edge makeEdge(Template currentTemplate, Location source, Location target, String select, Integer[] selectXY, String synchronisation, Integer[] synchronisationXY, String guard, Integer[] guardXY, String assignment, Integer[] assignmentXY) {
+        Edge newEdge = currentTemplate.createEdge();
+        currentTemplate.insert(newEdge, currentTemplate.getLast());
+        newEdge.setSource(source);
+        newEdge.setTarget(target);
         if (select != null) {
-            Property s = e.setProperty("select", select);
+            Property s = newEdge.setProperty("select", select);
             if (selectXY != null && selectXY.length >= 2) {
                 s.setProperty("x", selectXY[0]);
                 s.setProperty("y", selectXY[1]);
             }
         }
         if (synchronisation != null) {
-            Property s = e.setProperty("synchronisation", synchronisation);
+            Property s = newEdge.setProperty("synchronisation", synchronisation);
             if (synchronisationXY != null && synchronisationXY.length >= 2) {
                 s.setProperty("x", synchronisationXY[0]);
                 s.setProperty("y", synchronisationXY[1]);
             }
         }
         if (guard != null) {
-            Property g = e.setProperty("guard", guard);
+            Property g = newEdge.setProperty("guard", guard);
             if (guardXY != null && guardXY.length >= 2) {
                 g.setProperty("x", guardXY[0]);
                 g.setProperty("y", guardXY[1]);
             }
         }
         if (assignment != null) {
-            Property a = e.setProperty("assignment", assignment);
+            Property a = newEdge.setProperty("assignment", assignment);
             if (assignmentXY != null && assignmentXY.length >= 2) {
                 a.setProperty("x", assignmentXY[0]);
                 a.setProperty("y", assignmentXY[1]);
             }
         }
-        return e;
+        return newEdge;
     }
 
-    private Edge makeEdgeWithNails(Template t, Location source, Location target, String select, Integer[] selectXY, String synchronisation, Integer[] synchronisationXY, String guard, Integer[] guardXY, String assignment, Integer[] assignmentXY, Integer[] nailsXY) {
-        Edge ret = makeEdge(t, source, target, select, selectXY, synchronisation, synchronisationXY, guard, guardXY, assignment, assignmentXY);
+    /**
+     * Creates a new edge with nails at the provided coordinates.  If, for some reason, you call this method with null for the nails then it doesn't add any nails
+     * @param currentTemplate Template to which the Location is being added
+     * @param source Location from which the edge with extend
+     * @param target Location to which the edge will be directed to
+     * @param select Text for the select component of the edge. If null, there won't be any select on the edge
+     * @param selectXY Coordinates for the select component of the edge. If select is null, it doesn't matter what is provided here
+     * @param synchronisation Text for the synchronisation component of the edge. If null, there won't be any synchronisation on the edge
+     * @param synchronisationXY Coordinates for the synchronisation component of the edge. If synchronisation is null, it doesn't matter what is provided here
+     * @param guard Text for the guard component of the edge. If null, there won't be any guard on the edge
+     * @param guardXY Coordinates for the guard component of the edge. If guard is null, it doesn't matter what is provided here
+     * @param assignment Text for the assignmnet component of the edge. If null, there won't be any assignment on the edge
+     * @param assignmentXY Coordinates for the assignment component on the edge. If assignment is null, it doesn't matter what is provided here
+     * @param nailsXY Coordinates for the nails to be added. It is expected that they are given as an array with {X-coordinate-1, Y-coordinate-1, X-coordinate-2, Y-coordinate-2, etc.}
+     *                If null, then no nails are added
+     * @return
+     */
+    private Edge makeEdgeWithNails(Template currentTemplate, Location source, Location target, String select, Integer[] selectXY, String synchronisation, Integer[] synchronisationXY, String guard, Integer[] guardXY, String assignment, Integer[] assignmentXY, Integer[] nailsXY) {
+        Edge ret = makeEdge(currentTemplate, source, target, select, selectXY, synchronisation, synchronisationXY, guard, guardXY, assignment, assignmentXY);
         if (nailsXY != null) {
             Nail n = ret.createNail();
             n.setProperty("x", nailsXY[0]);
@@ -2044,12 +2585,20 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return ret;
     }
 
+    /**
+     * Creates the scheduler, the AV Utility template, and the AV templates
+     * @return The AV template
+     */
     private Element getScheduler() {
         getRunScheduler();
         getAVUtility();
         return getAttributeValueTemplate();
     }
 
+    /**
+     * Creates scheduler for Uppaal. This is the mirror of Soar's execution cycle and uses a broadcast channel to synchronize the other productions
+     * @return The scheduler template
+     */
     private Element getRunScheduler() {
         String startId = getCounter();
 
@@ -2094,7 +2643,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return runScheduler;
     }
 
-    private void addExtraAV(String AVName, int numValues, String identifier, String attribute, StringBuilder system, StringBuilder instantiationsCollection) {
+    /**
+     * Adds new AV to the two provided StringBuilders
+     * @param AVName Name of the new Attribute Value
+     * @param numValues Size of the values array that the new AV has
+     * @param identifier The identifier associated with the values in this new AV
+     * @param attribute The attribute associated with the values in this new AV
+     * @param system StringBuilder for the system declarations
+     * @param instantiationsCollection StringBuilder for the instantiations of the AVs
+     */
+    private void addAVToBuilder(String AVName, int numValues, String identifier, String attribute, StringBuilder system, StringBuilder instantiationsCollection) {
         system.append(AVName);
         instantiationsCollection.append(AVName);
         instantiationsCollection.append(" = ");
@@ -2103,6 +2661,11 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         instantiationsCollection.append(");\n");
     }
 
+    /**
+     * Creates all of the Attribute Value (AV) templates needed for the Soar agent. Uppaal can't create new memory at run time, so the maximum size of the memory must be initialized
+     * all at compile time. This is accomplished through static analysis in the SymbolVisitor and passed to here where templates are created with different sized value arrays
+     * @return An array with the instantiations and the system processes to be added in the global system
+     */
     private String[] makeAttributeValueTemplates() {
         StringBuilder instantiationsCollection = new StringBuilder();
         StringBuilder systemProcesses = new StringBuilder(" ");
@@ -2111,34 +2674,50 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 systemProcesses.append(", ");
             }
             systemProcesses.append(SoarTranslator.simplifiedString(UAT.getName()));
-            instantiationsCollection.append(SoarTranslator.simplifiedString(UAT.getName()));
-            instantiationsCollection.append(" = ");
-            instantiationsCollection.append("Attribute_Value(");
-            instantiationsCollection.append(UAT.getNumValues() + ", " + SoarTranslator.simplifiedString(UAT.getOperatorIndex()) + ", " + UAT.getAttributeIndex());
-            instantiationsCollection.append(");\n");
+            addAVToBuilder(SoarTranslator.simplifiedString(UAT.getName()), UAT.getNumValues(), SoarTranslator.simplifiedString(UAT.getOperatorIndex()), UAT.getAttributeIndex(), systemProcesses, instantiationsCollection);
         }
 
         if (systemProcesses.length() > 1) {
             systemProcesses.append(", ");
         }
-        addExtraAV("AV_final_operator", 1, "finalOp", "operator", systemProcesses, instantiationsCollection);
+        // Both of these are required for any Soar agent model. Each state has a superstate by default and the final operator is used for decision and application stage
+        addAVToBuilder("AV_final_operator", 1, "finalOp", "operator", systemProcesses, instantiationsCollection);
         systemProcesses.append(", ");
-        addExtraAV("AV_state_superstate", 1, "_state", "superstate", systemProcesses, instantiationsCollection);
+        addAVToBuilder("AV_state_superstate", 1, "_state", "superstate", systemProcesses, instantiationsCollection);
 
         return new String[]{instantiationsCollection.toString(), systemProcesses.toString()};
     }
 
+    /**
+     * Creates the Attribute Value (AV) template inside Uppaal used to store the values of each attribute of each identifier. They are stored in a template because you can't
+     * make different sized arrays in Uppaal and collect them into one structure very easily. This keeps all the information and methods needed for the AV templates localized
+     * instead of spread out in the global declarations.
+     * @return The AV template
+     */
     private Element getAttributeValueTemplate() {
         String startId = getCounter();
         String middleAddLocationID = getCounter();
 
         Template attributeValueTemplate = makeTemplate("Attribute_Value");
         attributeValueTemplate.setProperty("parameter", "const int NUM_VALUES, const int OPERATOR_ID, const int ATTRIBUTE_INDEX");
+        // These are all the functions needed to store/retrieve/remove WMEs in Uppaal to mirror what Soar does
         attributeValueTemplate.setProperty("declaration",
                 "int values[NUM_VALUES];\n" +
                 "int valuesIndex = 0;\n" +
                 "int containsIndex = -1;\n" +
                 "\n" +
+                        // This method is used to check conditions
+                        // if it is a variable
+                            //if there are still more values that we haven't checked in our list of variables
+                                //get the next one and continue checking the other conditions
+                            //else
+                                //indicate that there aren't any more values and signal to go back to the last time we picked a variable to select the next one from that list
+                        // else (it is a constant)
+                            //check to see if we have that value in our list of values
+                            //if we do
+                                //then we can continue checking other conditions
+                            //else
+                                //go back to the last time we picked a variable and select another one. Once we try all the combinations, the production won't be matched
                 "void doValuesContain() {\n" +
                 "\tif (globalValue == nilAnything) {\n" +
                 "\t\tif (lookAheadArray[lookAheadIndex] < valuesIndex) {\n" +
@@ -2192,6 +2771,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "\treturn -1;\n" +
                 "}\n" +
                 "\n" +
+                        // This method removes all the values. This is used when this WME has been retracted because we need to reuse this element unlike Soar which would just create
+                        // a new one
                 "void removeValue() {\n" +
                 "\twhile (valuesIndex > 0) {\n" +
                 "\t\tvaluesIndex--;\n" +
@@ -2210,6 +2791,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "\t}\n" +
                 "}\n" +
                 "\n" +
+                        // This method removes a specific value which is explicitly called by productions to delete WMEs
                 "void removeSpecificValue() {\n" +
                 "\tint i = containsIndex;\n" +
                 "\tif (i != -1) {\n" +
@@ -2244,7 +2826,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return attributeValueTemplate;
     }
 
+    /**
+     * Creates a little cute loop off the side of the loopLocation. Made by trial and error so change as needed
+     * @param direction Right now, can handle "right" or "left" of the provided location
+     * @param currentTemplate Template to add the loop to
+     * @param loopLocation Location to add the loop to
+     * @param guard Guard on the loop
+     * @param assignment Assignment on the loop
+     */
     private void makeLoop(String direction, Template currentTemplate, Location loopLocation, String guard, String assignment) {
+        // Constants found by guessing and checking. Modify as needed
         int[] constants = {417, 51, 68};
         if (direction.equals("right")) {
             constants[0] = -75;
@@ -2255,6 +2846,15 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdgeWithNails(currentTemplate, loopLocation, loopLocation, null, null, null, new Integer[]{xTextLocation, loopLocation.getY() - 10 - (SIZE_OF_TEXT * (getNumLines(guard, " &&") + getNumLines(assignment, ",")))}, guard, new Integer[]{xTextLocation, loopLocation.getY() - 10}, assignment, new Integer[]{xTextLocation, loopLocation.getY() - 10 + getNumLines(guard, " &&")*SIZE_OF_TEXT}, nails);
     }
 
+    /**
+     * AVUtility is used to match with non AV specific things like the disjunction tests for attributes as well as helping to catch edge cases. It also handles extra restrictions
+     * on conditions like being lessThan a specific value
+     *
+     * One important edge case is when selecting the next combination of variables to try to match in a production, you may select a value to be used as an identifier which doesn't
+     * have the attribute you need to check for as well.  Before, Uppaal would stall because the AVs only match when their identifier and attribute match.  This template includes
+     * a catch all edge that handles all of those cases though the guard gets really, really long
+     * @return The AVUtility template
+     */
     private Element getAVUtility() {
         Template AVUtilityTemplate = makeTemplate("Attribute_Value_Utility");
 
@@ -2301,6 +2901,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             makeLoop("right", AVUtilityTemplate, startLocation, "globalDoesContain == 0 &&\nglobalAttribute <= noneBut_1", "nextNumBut()");
         }
 
+        // One important edge case is when selecting the next combination of variables to try to match in a production, you may select a value to be used as an identifier which doesn't
+        // have the attribute you need to check for as well.  Before, Uppaal would stall because the AVs only match when their identifier and attribute match.  This template includes
+        // a catch all edge that handles all of those cases though the guard gets really, really long
         StringBuilder catchAll = new StringBuilder("globalDoesContain == 0 &&\n(");
         int shift = 2;
         int count;
@@ -2359,9 +2962,16 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         return AVUtilityTemplate;
     }
 
+    /**
+     * Create's OperatorPreferences template that is how Uppaal mimics Soar's operator selection process in the decision step
+     * @return Null
+     */
     private Element getOperatorPreferences() {
         Template operatorPreferencesTemplate = makeTemplate("preferenceResolutionTemplate");
 
+        // Includes all of the methods needed to take a collection of operators and narrow down the choices to one operator
+        // Note: Currently we can't handle substates and impasses. If the Soar agent hits a substate and is uploaded into Uppaal, Uppaal will hit the impasse and just stop
+        // This will need an update if that capability is added
         operatorPreferencesTemplate.setProperty("declaration",
                 "bool requiredAndProhibited;\n" +
                         "int currentOp;\n" +
@@ -2509,6 +3119,10 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                         "\t\treturn r;\n" +
                         "\t}\n" +
                         "}");
+
+        // These were added before most of the other components were added.  Therefore, they have fixed x and y values making them not very easy to move.
+        // todo: make the coordinates reactive like the other methods
+
         Location noName = makeLocationWithCoordinates(operatorPreferencesTemplate, null, getCounter(), true, false, -3488, -864, null, null);
         Location noName1 = makeLocationWithCoordinates(operatorPreferencesTemplate, null, getCounter(), true, false, -3488, -920, null, null);
         Location noName2 = makeLocationWithCoordinates(operatorPreferencesTemplate, null, getCounter(), true, false, -3488, -1120, null, null);
