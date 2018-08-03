@@ -3,7 +3,6 @@ package edu.fit.hiai.lvca.translator.soar;
 import com.uppaal.model.core2.*;
 import edu.fit.hiai.lvca.antlr4.SoarBaseVisitor;
 import edu.fit.hiai.lvca.antlr4.SoarParser;
-import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.RuleNode;
@@ -315,7 +314,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "bool removeOperator;\n" +
                 "bool productionFired;\n" +
                 "bool checkMatches;\n" +
-                "const int EMPTY = -2;\n" +
                 "const int numTemplates = " + _templateNames.size() + ";\n" +
                 "int stackCondition[numTemplates];\n" +
                 "int stackAction[numTemplates];\n" +
@@ -324,6 +322,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
                 "int stackActionIndex = -1;\n" +
                 "int stackRetractIndex = -1;\n" +
                 "int selectedFinalOperatorIndex;\n" +
+                "const int EMPTY = -2;\n" +
                 "const int remove = -3;\n" +
                 "const int addFunction = -4;\n" +
                 "const int subtractFunction = -5;\n" +
