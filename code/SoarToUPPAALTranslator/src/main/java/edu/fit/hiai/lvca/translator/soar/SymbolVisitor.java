@@ -71,11 +71,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
         return stringSymbols;
     }
 
-    SymbolTree getTree()
-    {
-        return workingMemoryTree;
-    }
-
     public Map<String, Map<String, AugmentedSymbolTree>> getAttributesAndValuesPerProduction() {
         return attributesAndValuesPerProduction;
     }
@@ -113,8 +108,6 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree>
     public Map<String, Boolean> getProductionToOSupported() { return productionToOSupported; }
 
     public Map<String, Map<String, String[]>> getAttributeVariableToDisjunctionTest() { return attributeVariableToDisjunctionTestPerProduction; }
-
-    public Map<String, Map<String, String>> getAttributeVariableToArrayName() { return attributeVariableToArrayNamePerProduction; }
 
     public Map<String, Integer> getProductionToProductionSize() { return productionToProductionSize; }
 

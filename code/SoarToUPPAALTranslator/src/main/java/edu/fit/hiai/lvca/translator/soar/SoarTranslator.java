@@ -277,7 +277,6 @@ public class SoarTranslator
         int maxQuerySize = symbolVisitor.getMaxQuerySize();
         Map<String, Boolean> productionToOSupported = symbolVisitor.getProductionToOSupported();
         Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction = symbolVisitor.getAttributeVariableToDisjunctionTest();
-        Map<String, Map<String, String>> attributeVariableToArrayNamePerProduction = symbolVisitor.getAttributeVariableToArrayName();
         Map<String, Integer> productionToProductionSize = symbolVisitor.getProductionToProductionSize();
 
         Map<String, Map<String, String>> variablesPerProductionContext = symbolVisitor.getGlobalVariableDictionary();
@@ -308,7 +307,7 @@ public class SoarTranslator
             variableToAttributes.put(variable, condensedAttributesValueCount.get(variable).getEdges());
         }
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, maxQuerySize, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction, attributeVariableToArrayNamePerProduction, productionToProductionSize));
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, maxQuerySize, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction, productionToProductionSize));
     }
 
     /**
