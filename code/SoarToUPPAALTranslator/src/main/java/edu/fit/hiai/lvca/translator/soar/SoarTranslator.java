@@ -41,7 +41,15 @@ public class SoarTranslator
     {
         parseArgs(args);
 
-        getUPPAAL(soarSourceFile);
+        LinkedList<UppaalAttributeValueTriad> AVCollection = getUPPAAL(soarSourceFile);
+
+        Scanner in = new Scanner(System.in);
+        System.out.println("Do you want to use the Plugin? (Yes/No)");
+        String answer = in.nextLine();
+        if (answer.equalsIgnoreCase("yes")) {
+            Uppaal_Plugin generateQueriesHelper = new Uppaal_Plugin(AVCollection);
+        }
+        in.close();
     }
 
     /**
@@ -346,8 +354,11 @@ public class SoarTranslator
      * @param soarSourceFile Provided by parseArgs
      * @throws IOException ANTLR throws error in the first line of the function if something is wrong with that process
      */
-    private static void getUPPAAL(String soarSourceFile) throws IOException {
+    private static LinkedList<UppaalAttributeValueTriad> getUPPAAL(String soarSourceFile) throws IOException {
+        System.out.println("Running Translator 1 / 3 .....");
         SoarParser soarParseTree = new SoarParser(new CommonTokenStream(new SoarLexer(new ANTLRFileStream(soarSourceFile))));
+        System.out.println("Running Translator 1 / 3 complete");
+        System.out.println("Running Translator 2 / 3 .....");
 
         //Mirrors all of the variables in SymbolVisitor.  Refer to that file for their description
         //Changes that need to be made often start with adding the variable into the SymbolVisitor, accessing it here in this list, and passing it to the UppaalSemanticVisitor
@@ -390,7 +401,11 @@ public class SoarTranslator
             variableToAttributes.put(variable, condensedAttributesValueCount.get(variable).getEdges());
         }
 
-        soarParseTree.soar().accept(new UPPAALSemanticVisitor(stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction));
+        System.out.println("Running Translator 2 / 3 complete");
+        System.out.println("Running Translator 3 / 3 .....");
+        soarParseTree.soar().accept(new UPPAALSemanticVisitor(outputFile, stringAttributeNames, variablesPerProductionContext, boolAttributeNames, numOperators, actualVariablesPerProduction, takenValues, uppaalOperatorCollection, AVCollection, variablesToPathWithID, productionToOSupported, variableToAttributes, attributeVariableToDisjunctionTestPerProduction));
+        System.out.println("Running Translator 3 / 3 complete");
+        return AVCollection;
     }
 
     /**

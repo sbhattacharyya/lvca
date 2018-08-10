@@ -27,6 +27,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
     //There are some structures specific to UppaalSemanticVisitor but there are also many that are just passed through from SymbolVisitor and SoarTranslator
     private static final int SIZE_OF_TEXT = 17; //How far to shift text down in Uppaal model. Found by guess and check
     static final String LITERAL_STRING_PREFIX = "literal_string__";
+    private final String _outputFileName;
     private final Set<String> _globals;
     private HashMap<String, Integer> _globalToIndex;
     private final Set<String> _booleanGlobals;
@@ -67,6 +68,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
 
     /**
      * Creates a new UPPAALSemanticVisitor and copies all of the passed in structures to globals stored in here
+     * @param outputFileName Name of the file that this Translator will generate
      * @param stringAttributeNames Set of string constants used in the Soar agent
      * @param variablesPerProductionContext Map from production name to a mapping from a variable to its path
      * @param boolAttributeNames Set of constants which are boolean values
@@ -81,7 +83,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
      * @param attributeVariableToDisjunctionTestPerProduction Map from production name to a mapping from variable (attribute) to a String array of the values it has to match
      *                                                        when used in a disjunctive test
      */
-    public UPPAALSemanticVisitor(Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Boolean> productionToOSupported, Map<String, LinkedList<String>> variableToAttributes, Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction) {
+    public UPPAALSemanticVisitor(String outputFileName, Set<String> stringAttributeNames, Map<String, Map<String, String>> variablesPerProductionContext, Set<String> boolAttributeNames, int numOperators, Map<String, ProductionVariables> actualVariablesPerProduction, HashSet<Integer> takenValues, LinkedList<String> uppaalOperatorCollection, LinkedList<UppaalAttributeValueTriad> AVCollection, Map<String, Map<String, String>> variablesToPathWithID, Map<String, Boolean> productionToOSupported, Map<String, LinkedList<String>> variableToAttributes, Map<String, Map<String, String[]>> attributeVariableToDisjunctionTestPerProduction) {
+        _outputFileName = outputFileName;
         _globals = stringAttributeNames;
         _booleanGlobals = boolAttributeNames;
         _variableDictionary = variablesPerProductionContext;
@@ -643,7 +646,8 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         getSystemElement(attributeValuePairs);
 
         try {
-            ourDocument.save("sampledoc.xml");
+            ourDocument.save(_outputFileName);
+            System.out.println("File saved as: " + _outputFileName);
         } catch (IOException er) {
             er.printStackTrace(System.err);
         }
@@ -1052,7 +1056,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             for (Map.Entry<String, String> variableToPath : _variableDictionary.get(productionName).entrySet()) {
                 if (variableToPath.getValue().equals("state_operator")) {
                     if (!first) {
-                        currentTemplateDeclaration.append(" ||\n");
+                        currentTemplateDeclaration.append(" ||\n\t\t\t\t");
                     }
                     currentTemplateDeclaration.append("retractOperatorsContains(1 + getIDFromOperator(productions[i].savedTempAndFunction[").append(conditionTempToIndex.get(SoarTranslator.simplifiedString("dummy_state_operator_" + variableToPath.getKey()))).append("]))");
                     first = false;
@@ -1077,7 +1081,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             StringBuilder clearOperators = new StringBuilder();
             for (String nextOperatorIndex : operatorIndexes) {
                 if (currentTemplateDeclaration.charAt(currentTemplateDeclaration.length() - 1) != '(') {
-                    currentTemplateDeclaration.append(" || ");
+                    currentTemplateDeclaration.append(" ||\n\t\t");
                 }
                 int correctedIndex = Integer.parseInt(nextOperatorIndex) + 1;
                 currentTemplateDeclaration.append("selectedFinalOperatorIndex == " + correctedIndex);
@@ -2625,7 +2629,7 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
         makeEdgeWithNails(runScheduler, lastLocation, lastLocation, null, null, "Reset_Apply!", new Integer[]{xTextLocation, lastLocationCoords[1] + SIZE_OF_TEXT*4}, "stackRetractIndex == -1 &&\ncheckApplyRetract", new Integer[]{xTextLocation, lastLocationCoords[1] + SIZE_OF_TEXT * 5}, "checkApplyRetract = false", new Integer[]{xTextLocation, lastLocationCoords[1] + SIZE_OF_TEXT*7}, new Integer[]{lastLocationCoords[0], lastLocationCoords[1] + SIZE_OF_TEXT * 7});
 
         goBackToProvidedLocation(runScheduler, lastLocation, proposalLocation, lastLocationCoords, "!checkApplyRetract &&\nproductionFired &&\nstackRetractIndex == -1", "isRetracting = false,\nretractOperatorsIndex = 0", false);
-        lastLocation = addHorizontalLocation(runScheduler, lastLocation, lastLocationCoords, "Decision", "Reset_Apply!", "!checkApplyRetract &&\n!productionFired &&\nstackRetractIndex == -1", "isRetracting = false,\nfillOthers(),\nretractOperatorsIndex = 0", false, null);
+        lastLocation = addHorizontalLocation(runScheduler, lastLocation, lastLocationCoords, "Decision", null, "!checkApplyRetract &&\n!productionFired &&\nstackRetractIndex == -1", "isRetracting = false,\nfillOthers(),\nretractOperatorsIndex = 0", false, null);
         lastLocation = addHorizontalLocation(runScheduler, lastLocation, lastLocationCoords, "Ready_Application", "Require_Test!", null, null, false, null);
         Location applicationLocation = addHorizontalLocation(runScheduler, lastLocation, lastLocationCoords, "Application", "Continue_Run?", null, null, false, null);
         lastLocation = applicationLocation;
