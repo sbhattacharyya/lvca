@@ -114,10 +114,8 @@ public class ASTCountWithValues {
             if (!currentASTCountWithValues.containsEdge(simplifiedEdgeName)) {
                 ASTCountWithValues newEdge = new ASTCountWithValues();
                 currentASTCountWithValues.edges.put(simplifiedEdgeName, newEdge);
-                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, newEdge);
-            } else {
-                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName));
             }
+            edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName));
         }
     }
 
