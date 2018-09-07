@@ -1168,6 +1168,9 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (skipNext) {
                 i++;
                 skipNext = false;
+                if (i >= productionIdentifiers.size()) {
+                    break;
+                }
             }
             conditionsOrAssignments[builderIndex] = new StringBuilder();
             inverseConditionOrAssignments[builderIndex] = new StringBuilder();

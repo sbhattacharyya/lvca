@@ -264,6 +264,7 @@ class SymbolVisitor extends SoarBaseVisitor<SymbolTree> {
         SymbolTree variableBranch = attribute.DFS("variable").getChildren().get(0);
         attributeVariableToArrayName.put(variableBranch.name, disjunctionBranch.name);
         return variableBranch.name;
+
     }
 
     /**
