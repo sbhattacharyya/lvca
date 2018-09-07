@@ -86,9 +86,8 @@ public class ASTCountWithValues {
      * @param variablesToPath Maps between variable name and their path with ID
      * @param condensedAttributesValueCount Global structure that is collecting the values. Map from variable to its ASTCountWithValues
      * @param currentASTCountWithValues Current ASTCountWithValues in condensedAttributesValueCount. Is first provided as null
-     * @param attributes Collection of attribute names that are found. Used to give attributes values in Uppaal later
      */
-    public void collectEdges(Map<String, String> variablesToPath, Map<String, ASTCountWithValues> condensedAttributesValueCount, ASTCountWithValues currentASTCountWithValues, HashSet<String> attributes) {
+    public void collectEdges(Map<String, String> variablesToPath, Map<String, ASTCountWithValues> condensedAttributesValueCount, ASTCountWithValues currentASTCountWithValues) {
         if (isHead()) {
             String firstValue = getHeadValue();
             String simplifiedFirstVariable = variablesToPath.get(firstValue);
@@ -112,13 +111,12 @@ public class ASTCountWithValues {
 
         for (String edgeName : edges.keySet()) {
             String simplifiedEdgeName = SoarTranslator.simplifiedString(edgeName);
-            attributes.add(simplifiedEdgeName);
             if (!currentASTCountWithValues.containsEdge(simplifiedEdgeName)) {
                 ASTCountWithValues newEdge = new ASTCountWithValues();
                 currentASTCountWithValues.edges.put(simplifiedEdgeName, newEdge);
-                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, newEdge,attributes);
+                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, newEdge);
             } else {
-                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName), attributes);
+                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName));
             }
         }
     }

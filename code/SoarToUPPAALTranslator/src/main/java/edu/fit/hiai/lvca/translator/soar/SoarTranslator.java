@@ -45,7 +45,7 @@ public class SoarTranslator
 
         Scanner in = new Scanner(System.in);
         System.out.println("Do you want to use the Plugin? (Yes/No)");
-        String answer = in.nextLine();
+        String answer = /*in.nextLine()*/"no";
         if (answer.equalsIgnoreCase("yes")) {
             Uppaal_Plugin generateQueriesHelper = new Uppaal_Plugin(AVCollection);
         }
@@ -291,13 +291,11 @@ public class SoarTranslator
      * @param variablesPerProductionContext Maps production name to a mapping between variable name and their path with ID
      */
     private static void condensedAttributesAndCollect(Map<String, ASTCountWithValues> condensedAttributesValueCount, Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction, Map<String, Map<String, String>> variablesPerProductionContext) {
-        HashSet<String> attributes = new HashSet<>();
-
         for (String productionName : attributeValueCountPerProduction.keySet()) {
             Map<String, ASTCountWithValues> currentProductionToASTCountWithValues = attributeValueCountPerProduction.get(productionName);
             Map<String, String> variablesToPath = variablesPerProductionContext.get(productionName);
             for (ASTCountWithValues currentASTCountWithVariables : currentProductionToASTCountWithValues.values()) {
-                currentASTCountWithVariables.collectEdges(variablesToPath, condensedAttributesValueCount, null, attributes);
+                currentASTCountWithVariables.collectEdges(variablesToPath, condensedAttributesValueCount, null);
             }
         }
     }
