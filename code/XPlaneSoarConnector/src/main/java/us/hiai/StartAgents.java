@@ -43,14 +43,12 @@ public class StartAgents
     {
         if ( xpc == null )
         {
-            try
-            {
+            try {
                 xpc = new XPlaneConnect();
                 // Ensure connection established.
                 xpc.getDREF("sim/test/test_float");
                 return xpc;
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 System.err.println(e.getStackTrace()[0] + e.getMessage() + "  Is X-Plane running?");
             }
             System.exit(-1);

@@ -45,7 +45,7 @@ public class SoarTranslator
 
         Scanner in = new Scanner(System.in);
         System.out.println("Do you want to use the Plugin? (Yes/No)");
-        String answer = /*in.nextLine()*/"no";
+        String answer = in.nextLine();
         if (answer.equalsIgnoreCase("yes")) {
             Uppaal_Plugin generateQueriesHelper = new Uppaal_Plugin(AVCollection);
         }
@@ -290,14 +290,23 @@ public class SoarTranslator
      * @param attributeValueCountPerProduction Mapping from production name to a mapping between variable and their ASTCountWithVariables.
      * @param variablesPerProductionContext Maps production name to a mapping between variable name and their path with ID
      */
-    private static void condensedAttributesAndCollect(Map<String, ASTCountWithValues> condensedAttributesValueCount, Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction, Map<String, Map<String, String>> variablesPerProductionContext) {
+    private static Map<String, ProductionVariables> condensedAttributesAndCollect(Map<String, ASTCountWithValues> condensedAttributesValueCount, Map<String, Map<String, ASTCountWithValues>> attributeValueCountPerProduction, Map<String, Map<String, String>> variablesPerProductionContext, Map<String, ProductionVariables> actualVariablesPerProduction) {
+        HashSet<String> attributes = new HashSet<>();
+        Map<String, ProductionVariables> variableToAnalyzeAttributes = new HashMap<>();
         for (String productionName : attributeValueCountPerProduction.keySet()) {
             Map<String, ASTCountWithValues> currentProductionToASTCountWithValues = attributeValueCountPerProduction.get(productionName);
             Map<String, String> variablesToPath = variablesPerProductionContext.get(productionName);
-            for (ASTCountWithValues currentASTCountWithVariables : currentProductionToASTCountWithValues.values()) {
-                currentASTCountWithVariables.collectEdges(variablesToPath, condensedAttributesValueCount, null);
+            ProductionVariables currentActualVariables = actualVariablesPerProduction.get(productionName);
+            for (Map.Entry<String, ASTCountWithValues> variableToASTCountWithValues : currentProductionToASTCountWithValues.entrySet()) {
+                ProductionVariables analyzeAttributes = variableToAnalyzeAttributes.get(variablesToPath.get(variableToASTCountWithValues.getKey()));
+                if (analyzeAttributes == null) {
+                    analyzeAttributes = new ProductionVariables(variablesToPath.get(variableToASTCountWithValues.getKey()));
+                    variableToAnalyzeAttributes.put(variablesToPath.get(variableToASTCountWithValues.getKey()), analyzeAttributes);
+                }
+                variableToASTCountWithValues.getValue().collectEdges(variablesToPath, condensedAttributesValueCount, null, attributes, null, analyzeAttributes, currentActualVariables);
             }
         }
+        return variableToAnalyzeAttributes;
     }
 
     /**
@@ -390,7 +399,8 @@ public class SoarTranslator
         LinkedList<String> uppaalOperatorCollection = giveVariablesIDs(attributesAndValuesPerProduction, takenValues, variablesToPathWithID, variableIDToIndex, variablesPerProductionContext, variablesCreatedOrUpdated);
 
         Map<String, ASTCountWithValues> condensedAttributesValueCount = new HashMap<>();
-        condensedAttributesAndCollect(condensedAttributesValueCount, attributeValueCountPerProduction, variablesToPathWithID);
+        Map<String, ProductionVariables> variableToAnalyzeAttributes = condensedAttributesAndCollect(condensedAttributesValueCount, attributeValueCountPerProduction, variablesToPathWithID, actualVariablesPerProduction);
+        variableToAnalyzeAttributes.values().forEach(e -> e.clean());
 
         LinkedList<UppaalAttributeValueTriad> AVCollection = collectAttributeTriads(condensedAttributesValueCount);
 

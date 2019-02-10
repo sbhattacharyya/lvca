@@ -262,4 +262,5 @@ public class AugmentedSymbolTree {
             AE.applyStateMatchesEdge(attributesAndValuesState, stateAttributesAndValuesForCheck, level + 1, attributesMatch, attributeMatchIndex + 1);
         }
     }
+
 }

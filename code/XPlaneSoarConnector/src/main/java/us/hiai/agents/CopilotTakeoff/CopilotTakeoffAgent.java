@@ -53,7 +53,7 @@ public class CopilotTakeoffAgent extends XPlaneAgent
 
     @Override
     public boolean runOnStartup() {
-        return true;
+        return false;
     }
 
     @Override
@@ -100,7 +100,6 @@ public class CopilotTakeoffAgent extends XPlaneAgent
         syms = sagt.getSymbols();
 
 //        printWme(builder.getWme("fd"));
-
         try
         {
             String pathToSoar = "src/main/soar/agents/CopilotTakeoff.soar".replace("/", File.separator);

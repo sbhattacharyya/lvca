@@ -217,6 +217,9 @@ public class XPlaneConnector
     static boolean airBrakesON = false;
     static boolean wheelBrakesON = false;
     static boolean reverseON = false;
+    static float[] oilPressurePerEngine;
+    static float[] oilPressureGreenLo;
+    static float[] currentTime;
 
     public static synchronized FlightData getFlightData()
     {
@@ -252,6 +255,10 @@ public class XPlaneConnector
             wheelBrakesON = wheelBrakes[0] == 1.0f;
             reverseON = reversers[0] != 0.0f;
             enginesOK = Arrays.deepEquals(engineStats, new float[][]{{0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}});
+
+            oilPressurePerEngine = xpc.getDREF("sim/flightmodel/engine/ENGN_oil_press_psi");
+            oilPressureGreenLo = xpc.getDREF("sim/aircraft/limits/green_lo_oilP");
+            currentTime = xpc.getDREF("sim/time/local_time_sec");
         }
         catch (Throwable e)
         {
@@ -265,6 +272,6 @@ public class XPlaneConnector
 //        }
 
 
-        return new FlightData((int) values[0][0], (int) values[1][0], values[2][0], values[3][0], enginesOK, wheelBrakesON, airBrakesON, reverseON);
+        return new FlightData((int) values[0][0], (int) values[1][0], values[2][0], values[3][0], enginesOK, wheelBrakesON, airBrakesON, reverseON, oilPressurePerEngine, (double) oilPressureGreenLo[0], (double) currentTime[0]);
     }
 }

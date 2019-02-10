@@ -86,8 +86,9 @@ public class ASTCountWithValues {
      * @param variablesToPath Maps between variable name and their path with ID
      * @param condensedAttributesValueCount Global structure that is collecting the values. Map from variable to its ASTCountWithValues
      * @param currentASTCountWithValues Current ASTCountWithValues in condensedAttributesValueCount. Is first provided as null
+     * @param attributes Collection of attribute names that are found. Used to give attributes values in Uppaal later
      */
-    public void collectEdges(Map<String, String> variablesToPath, Map<String, ASTCountWithValues> condensedAttributesValueCount, ASTCountWithValues currentASTCountWithValues) {
+    public void collectEdges(Map<String, String> variablesToPath, Map<String, ASTCountWithValues> condensedAttributesValueCount, ASTCountWithValues currentASTCountWithValues, HashSet<String> attributes, String currentAttribute, ProductionVariables analyzeAttributes, ProductionVariables currentActualVariables) {
         if (isHead()) {
             String firstValue = getHeadValue();
             String simplifiedFirstVariable = variablesToPath.get(firstValue);
@@ -102,6 +103,9 @@ public class ASTCountWithValues {
                 if (!currentASTCountWithValues.containsValue(nextValue)) {
                     currentASTCountWithValues.addValue(nextValue);
                 }
+                if (nextValue.startsWith("<") && currentActualVariables.rejectedContains(nextValue)) {
+                    analyzeAttributes.addToRejected(currentAttribute);
+                }
             }
             // numValues can be different than how many values are actually in there because:
             // numValues goes up every time a value is added that isn't in values
@@ -111,11 +115,15 @@ public class ASTCountWithValues {
 
         for (String edgeName : edges.keySet()) {
             String simplifiedEdgeName = SoarTranslator.simplifiedString(edgeName);
+            attributes.add(simplifiedEdgeName);
+            analyzeAttributes.addToVaribles(simplifiedEdgeName);
             if (!currentASTCountWithValues.containsEdge(simplifiedEdgeName)) {
                 ASTCountWithValues newEdge = new ASTCountWithValues();
                 currentASTCountWithValues.edges.put(simplifiedEdgeName, newEdge);
+                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, newEdge, attributes, simplifiedEdgeName, analyzeAttributes, currentActualVariables);
+            } else {
+                edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName), attributes, simplifiedEdgeName, analyzeAttributes, currentActualVariables);
             }
-            edges.get(edgeName).collectEdges(variablesToPath, condensedAttributesValueCount, currentASTCountWithValues.edges.get(simplifiedEdgeName));
         }
     }
 
@@ -157,5 +165,13 @@ public class ASTCountWithValues {
     public void copyValues(String[] attributes) {
         HashSet<String> attribute1Values = edges.get(attributes[0]).values;
         attribute1Values.forEach(av -> edges.get(attributes[1]).addValue(av));
+    }
+
+    public void filterAttributes(HashSet<String> attributesToTrack) {
+        for (String nextAttribute : edges.keySet()) {
+            if (edges.get(nextAttribute).numValues > edges.get(nextAttribute).values.size()) {
+                attributesToTrack.remove(nextAttribute);
+            }
+        }
     }
 }
