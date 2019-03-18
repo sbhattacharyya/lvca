@@ -1,12 +1,14 @@
 package us.hiai.xplane;
 
+import gov.nasa.xpc.WaypointOp;
 import gov.nasa.xpc.XPlaneConnect;
 import us.hiai.data.FlightData;
+import us.hiai.util.GPS_Intersection;
 
 import java.io.IOException;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class XPlaneConnector
 {
@@ -139,6 +141,12 @@ public class XPlaneConnector
         changeControlSurfacePositions(ControlSurface.FLAPS, positiveRatio);
     }
 
+    public static void setAutopilotHeading(float heading) {
+        setValueOnSim("sim/cockpit/autopilot/heading", heading);
+    }
+
+
+
     // ------------------------------------------------------------
 
     private float[][] getValuesFromSim(String[] strs)
@@ -172,7 +180,7 @@ public class XPlaneConnector
         System.err.println(e.toString() + " " + extra);
     }
 
-    private static void setValueOnSim(String s, float val)
+    public static void setValueOnSim(String s, float val)
     {
         try
         {
@@ -208,70 +216,72 @@ public class XPlaneConnector
         }
     }
 
-    static float[][] values;
-    static float[][] engineStats;
-    static float[][] controlSurfaces;
-    static float[] reversers;
-    static float[] wheelBrakes;
-    static boolean enginesOK = true;
-    static boolean airBrakesON = false;
-    static boolean wheelBrakesON = false;
-    static boolean reverseON = false;
-    static float[] oilPressurePerEngine;
-    static float[] oilPressureGreenLo;
-    static float[] currentTime;
+    private static boolean enginesOK = true;
+    private static boolean airBrakesON = false;
+    private static boolean wheelBrakesON = false;
+    private static boolean reverseON = false;
+    private static int isPopulated = 0;
 
-    public static synchronized FlightData getFlightData()
+    public static synchronized FlightData getFlightData(GPS_Intersection gpsIntersect)
     {
-
+        float[][] values;
+        float[] oilPressurePerEngine;
+        float oilPressureGreenLo;
+        float currentTime;
+        float autopilotHeading;
+        float expectedGPSCourse;
+        float groundSpeed;
         try {
-
             values = xpc.getDREFs(new String[]{
-                    "sim/flightmodel/position/indicated_airspeed",
-                    "sim/cockpit2/gauges/indicators/altitude_ft_pilot",
-                    "sim/flightmodel/position/latitude",
-                    "sim/flightmodel/position/longitude"
+                    "sim/flightmodel/position/indicated_airspeed",          // 0
+                    "sim/cockpit2/gauges/indicators/altitude_ft_pilot",     // 1
+                    "sim/flightmodel/position/latitude",                    // 2
+                    "sim/flightmodel/position/longitude",                   // 3
+                    "sim/operation/failures/rel_engfai0",                   // 4
+                    "sim/operation/failures/rel_engfai1",                   // 5
+                    "sim/operation/failures/rel_engfai2",                   // 6
+                    "sim/operation/failures/rel_engfai3",                   // 7
+                    "sim/operation/failures/rel_engfai4",                   // 8
+                    "sim/operation/failures/rel_engfai5",                   // 9
+                    "sim/operation/failures/rel_engfai6",                   // 10
+                    "sim/operation/failures/rel_engfai7",                   // 11
+                    "sim/cockpit2/controls/speedbrake_ratio",               // 12
+                    "sim/flightmodel/controls/parkbrake",                   // 13
+                    "sim/flightmodel/engine/ENGN_oil_press_psi",            // 14
+                    "sim/aircraft/limits/green_lo_oilP",                    // 15
+                    "sim/time/local_time_sec",                              // 16
+                    "sim/cockpit/autopilot/heading",                        // 17
+                    "sim/cockpit/radios/gps2_course_degtm2",                // 18
+                    "sim/flightmodel/position/groundspeed"                 // 19
+
             });
-
-            engineStats = xpc.getDREFs(new String []{
-                    "sim/operation/failures/rel_engfai0",
-                    "sim/operation/failures/rel_engfai1",
-                    "sim/operation/failures/rel_engfai2",
-                    "sim/operation/failures/rel_engfai3",
-                    "sim/operation/failures/rel_engfai4",
-                    "sim/operation/failures/rel_engfai5",
-                    "sim/operation/failures/rel_engfai6",
-                    "sim/operation/failures/rel_engfai7"
-            });
-
-            controlSurfaces = xpc.getDREFs(new String[]{
-                    "sim/cockpit2/controls/speedbrake_ratio"
-            });
-
-            wheelBrakes = xpc.getDREF("sim/flightmodel/controls/parkbrake");
-            reversers = xpc.getDREF("sim/cockpit/warnings/annunciators/reverse");
-
-            airBrakesON = controlSurfaces[0][0] == 1.0f;
-            wheelBrakesON = wheelBrakes[0] == 1.0f;
-            reverseON = reversers[0] != 0.0f;
+            float[][] engineStats = new float[][]{values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11]};
+            airBrakesON = values[12][0] == 1.0f;
+            wheelBrakesON = values[13][0] == 1.0f;
+            reverseON = values[13][0] != 0.0f;
             enginesOK = Arrays.deepEquals(engineStats, new float[][]{{0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}});
-
-            oilPressurePerEngine = xpc.getDREF("sim/flightmodel/engine/ENGN_oil_press_psi");
-            oilPressureGreenLo = xpc.getDREF("sim/aircraft/limits/green_lo_oilP");
-            currentTime = xpc.getDREF("sim/time/local_time_sec");
+            oilPressurePerEngine = values[14];
+            oilPressureGreenLo = values[15][0];
+            currentTime = values[16][0];
+            boolean isInPopulatedArea = gpsIntersect.coordIsContained(values[2][0], values[3][0]);
+            isPopulated = isInPopulatedArea ? 1 : 0;
+            autopilotHeading = values[17][0];
+            //sim/cockpit/radios/gps2_course_degtm2 = course to next gps coord
+            expectedGPSCourse = values[18][0];
+            groundSpeed = values[19][0];
+            //sim/cockpit2/radios/indicators/gps_relative_heading_AHARS_deg_pilot = current course on GPS. Round up and that is what is displayed
         }
         catch (Throwable e)
         {
             System.err.println(e.getMessage());
             xpc = XPlaneConnector.refresh();
+            return new FlightData(0, 0, 0, 0, enginesOK, wheelBrakesON, airBrakesON, reverseON, new float[]{0}, 0, 0, isPopulated, 0, 0, 0);
         }
 
 //        if ( values.length < 4)
 //        {
 //            System.err.println("Somehow, values.length < 4");
 //        }
-
-
-        return new FlightData((int) values[0][0], (int) values[1][0], values[2][0], values[3][0], enginesOK, wheelBrakesON, airBrakesON, reverseON, oilPressurePerEngine, (double) oilPressureGreenLo[0], (double) currentTime[0]);
+        return new FlightData((int) values[0][0], (int) values[1][0], values[2][0], values[3][0], enginesOK, wheelBrakesON, airBrakesON, reverseON, oilPressurePerEngine, (double) oilPressureGreenLo, (double) currentTime, isPopulated, autopilotHeading, expectedGPSCourse, groundSpeed);
     }
 }

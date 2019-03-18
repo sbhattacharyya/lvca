@@ -147,7 +147,7 @@ public class CopilotTakeoffAgent extends XPlaneAgent
     {
         return () ->
         {
-            FlightData data = getFlightData();
+            FlightData data = getFlightData(null);
 
             System.out.println("\t\t\t\tSpeed: "+data.airspeed);
 

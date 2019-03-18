@@ -17,7 +17,7 @@ public class GPS_Intersection
     ArrayList<ArrayList<Double>> lat_array;
     ArrayList<ArrayList<Double>> long_array;
 
-    GPS_Intersection() {
+    public GPS_Intersection() {
         polygons = new ArrayList<>();
 
         ArrayList<String> polygon_1_lat_long_pairs = new ArrayList<>();
@@ -157,6 +157,7 @@ public class GPS_Intersection
         polygon_2_lat_long_pairs.add("32.77967, -96.81383");
         polygon_2_lat_long_pairs.add("32.80567, -96.86766");
 
+
         polygons.add(polygon_2_lat_long_pairs);
 
 
@@ -198,6 +199,11 @@ public class GPS_Intersection
 
 
     public void printIfIsContained(double testLat, double testLong) {
+        boolean isContained = coordIsContained(testLat, testLong);
+        System.out.println(isContained);
+    }
+
+    public boolean coordIsContained(double testLat, double testLong) {
         boolean isContained = false;
         for (int i = 0; i < polygons.size(); i++) {
             if (coordinate_is_inside_polygon(testLat, testLong, lat_array.get(i), long_array.get(i))) {
@@ -205,7 +211,7 @@ public class GPS_Intersection
                 break;
             }
         }
-        System.out.println(isContained);
+        return isContained;
     }
 
     // uncomment for testing

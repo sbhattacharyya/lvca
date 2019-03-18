@@ -43,16 +43,21 @@ public class StartAgents
     {
         if ( xpc == null )
         {
-            try {
-                xpc = new XPlaneConnect();
-                // Ensure connection established.
-                xpc.getDREF("sim/test/test_float");
-                return xpc;
-            } catch (IOException e) {
-                System.err.println(e.getStackTrace()[0] + e.getMessage() + "  Is X-Plane running?");
+            while (true) {
+                try {
+                    xpc = new XPlaneConnect();
+                    // Ensure connection established.
+                    xpc.getDREF("sim/test/test_float");
+                    return xpc;
+                } catch (IOException e) {
+//                    System.err.println(e.getStackTrace()[0] + e.getMessage() + "  Is X-Plane running?");
+                    System.out.println("Not running");
+                    return null;
+                }
             }
-            System.exit(-1);
-            return null;
+
+            //System.exit(-1);
+            //return null;
         }
         else
         {

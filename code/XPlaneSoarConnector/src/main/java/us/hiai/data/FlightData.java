@@ -2,8 +2,6 @@ package us.hiai.data;
 
 import org.jsoar.util.events.SoarEvent;
 
-import java.util.Arrays;
-
 /**
  * Created by icislab on 10/13/2016.
  */
@@ -20,8 +18,12 @@ public class FlightData implements SoarEvent
     public double[] oilPressurePerEngine;
     public double oilPressureGreenLo;
     public double currentTime;
+    public int isPopulated;
+    public double autopilotHeading;
+    public double expectedGPSCourse;
+    public double groundSpeed;
 
-    public FlightData(int airspeed, int altitude, double lat, double lon, boolean allEnginesOK, boolean wBrakes, boolean aBrakes, boolean reversers, float[] oilPressurePerEngine, double oilPressureGreenLo, double currentTime)
+    public FlightData(int airspeed, int altitude, double lat, double lon, boolean allEnginesOK, boolean wBrakes, boolean aBrakes, boolean reversers, float[] oilPressurePerEngine, double oilPressureGreenLo, double currentTime, int isPopulated, double autopilotHeading, double expectedGPSCourse, double groundSpeed)
     {
         this.airspeed = airspeed;
         this.altitude = altitude;
@@ -37,6 +39,10 @@ public class FlightData implements SoarEvent
         }
         this.oilPressureGreenLo = oilPressureGreenLo;
         this.currentTime = currentTime;
+        this.isPopulated = isPopulated;
+        this.autopilotHeading = autopilotHeading;
+        this.expectedGPSCourse = expectedGPSCourse;
+        this.groundSpeed = groundSpeed;
     }
 
 }

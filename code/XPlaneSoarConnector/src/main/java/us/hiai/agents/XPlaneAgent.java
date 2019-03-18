@@ -113,6 +113,10 @@ public abstract class XPlaneAgent implements AutoCloseable, Runnable
         return underlyingSoarAgent.getAgent();
     }
 
+    protected ThreadedAgent getThreadedAgent() {
+        return underlyingSoarAgent;
+    }
+
     @Override
     public void run()
     {

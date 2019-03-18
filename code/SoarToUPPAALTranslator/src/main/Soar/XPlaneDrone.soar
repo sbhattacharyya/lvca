@@ -18,13 +18,13 @@ sp {drone*apply*initialize
     (state <s> ^operator <o*1>)
     (<o*1> ^name initialize-drone)
     -->
-    (<s> ^name droneFlight ^haveLink false ^populated unknown ^wait-flag 1)
+    (<s> ^name droneFlight ^wait-flag 1)
 }
 
 sp {drone*propose*operator*C1-Baseline
     "No contingency behavior - continue normally"
     (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^unaddressedProblem -^addressedProblem
-               ^haveLink true -^oilDrop large)
+               ^takeOver true -^oilDrop large)
     -->
     (<s> ^operator <o> +)
     (<o> ^name continue)
@@ -70,7 +70,7 @@ sp {drone*apply*operator*address-C5-Fault
 sp {drone*propose*operator*C2-Lost-Link
     "Return to base via same routing after 1 minute following loss of link to avoid flight over populous areas"
     :o-support
-    (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^addressedProblem ^haveLink false
+    (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^addressedProblem ^takeOver false
                ^populated {<< light-to-heavy unknown >> <p>})
     (<drone-data> ^currentTime <current-time>)
     -->
@@ -80,7 +80,7 @@ sp {drone*propose*operator*C2-Lost-Link
 
 sp {drone*propose*operator*C3-Lost-Link
     "Return to base via same routing after 8 minutes following loss of link because lightly populated and might restore link"
-    (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^addressedProblem ^haveLink false
+    (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^addressedProblem ^takeOver false
                ^populated light)
     (<drone-data> ^currentTime <current-time>)
     -->
@@ -99,7 +99,7 @@ sp {drone*apply*operator*address-C2-and-C3
 
 sp {drone*propose*operator*C4-Lost-Link
     "Maintain Pre-Programmed Course, Return to mission altitude/altitude floor (<= 500 ft) 1 minute after loss of link"
-    (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^addressedProblem ^haveLink false
+    (state <s> ^name droneFlight ^io.input-link.flightdata <drone-data> -^addressedProblem ^takeOver false
                ^populated none)
     (<drone-data> ^currentTime <current-time>)
     -->
@@ -144,3 +144,65 @@ sp {drone*apply*timer-remove-execute
     (<s> ^timer <t> -)
 }
 
+sp {drone*apply*takeOver
+    "Issues first command when takeover is active"
+    :o-support
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd>)
+    (<fd> ^takeOver true)
+    -->
+    (<s> ^sentCommand aiOn)
+}
+
+sp {drone*apply*updateOut*setAIOn
+    "Creates command on output for sending to XPlane to turn on the AI"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sentCommand aiOn)
+    (<fd> ^takeOver true)
+    -->
+    (<out> ^command <com>)
+    (<com> ^dref sim/cockpit/autopilot/autopilot_mode
+           ^setValue 2
+           ^name setAIOn)
+    (<s> ^sentCommand aiOn -
+         ^sentCommand reverse)
+    (write (crlf) |Adding AI_ON!|)
+}
+
+
+sp {drone*removeOutputCommand
+    "Removes output command"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd>)
+    (<fd> ^removeCommand <rc>)
+    (<out> ^command <rc>)
+    -->
+    (<out> ^command <rc> -)
+}
+
+sp {drone*apply*updateOut*queryForTimer
+    "Creates command on output to check if the plane will be over a populated area in the next minute"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sentCommand queryPop)
+    (<fd> ^takeOver true)
+    -->
+    (<out> ^command <com>)
+    (<com> ^dref null
+           ^setValue calculateWillBeInPopulatedArea
+           ^name timerChecker)
+    (<s> ^sentCommand queryPop -)
+    (write (crlf) | Adding Check Timer Command!|)
+}
+
+sp {drone*apply*updateOut*reverseWaypoints
+    "Creates command on output for sending to XPlane to overwrite the way points to return to home"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sentCommand reverse)
+    (<fd> ^takeOver true)
+    -->
+    (<out> ^command <com>)
+    (<com> ^dref null
+           ^setValue reverse
+           ^name reverseWaypoints)
+    (<s> ^sentCommand reverse -)
+    (write (crlf) |Adding Reverse Command!|)
+}
