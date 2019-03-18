@@ -27,10 +27,11 @@ public class DroneAgentSingleThread
 {
 
     private static final int EARTH_RADIUS = 6371000;
+    public static final int NM_METERS = 1852;
     private SymbolFactory syms;
     private InputBuilder builder;
     private DecisionCycle decisionCycle;
-    volatile private boolean takeOver = false;
+    private boolean takeOver = false;
     private Agent sagt;
     private GPS_Intersection gpsIntersect;
     private FlightPlanParser fpp;
@@ -138,8 +139,6 @@ public class DroneAgentSingleThread
             }
         });
 
-
-
         syms = sagt.getSymbols();
         Future ff = Executors.newSingleThreadExecutor().submit(this::flipFlag);
         pushFlightData();
@@ -160,17 +159,23 @@ public class DroneAgentSingleThread
     }
 
     private double calculateBearing(double planeLat, double planeLong) {
-        calculateDistanceToCurrentWaypoint(planeLat, planeLong);
+        double distance = calculateDistanceToCurrentWaypoint(planeLat, planeLong);
         double lat1 = planeLat * convertToRadians;
         double lat2 = fpp.getCurrentWaypoint().getLatitude() * convertToRadians;
         double longDif = (fpp.getCurrentWaypoint().getLongitude() - planeLong) * convertToRadians;
         double y = Math.sin(longDif) * Math.cos(lat2);
         double x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(longDif);
         // convert radian returned by atan2 to degrees
-        return ((Math.atan2(y, x) / convertToRadians) + 360) % 360;
+        double bearing = (Math.atan2(y, x) / convertToRadians) + 360;
+        if (circleCurrentWYPT)
+            if (distance > NM_METERS)
+                bearing += Math.asin(1852 / (2 * distance));
+            else
+                bearing += 90;
+        return bearing % 360;
     }
 
-    private void calculateDistanceToCurrentWaypoint(double planeLat, double planeLong) {
+    private double calculateDistanceToCurrentWaypoint(double planeLat, double planeLong) {
         double lat1 = planeLat * convertToRadians;
         double lat2 = fpp.getCurrentWaypoint().getLatitude() * convertToRadians;
         double latDif = ((planeLat - fpp.getCurrentWaypoint().getLatitude()) * convertToRadians) / 2;
@@ -179,14 +184,13 @@ public class DroneAgentSingleThread
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         // earth's radius = 6371000 m
         double distance = EARTH_RADIUS * c;
-        System.out.println("DISTANCE: " + distance);
         // 1852 meters = 1 nautical mile
-        if (distance < 1852 && fpp.currentWaypoint < fpp.flightPlan.waypoints.size() - 1) {
+        if (distance < NM_METERS && fpp.currentWaypoint < fpp.flightPlan.waypoints.size() - 1) {
                 fpp.currentWaypoint++;
                 if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
                     circleCurrentWYPT = true;
         }
-
+        return distance;
     }
 
     private boolean willBeInPopulated (double currentLat, double currentLong, double currentBearing, double groundSpeed, double time) {
