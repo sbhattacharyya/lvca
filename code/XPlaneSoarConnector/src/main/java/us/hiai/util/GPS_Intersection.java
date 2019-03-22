@@ -1,4 +1,9 @@
 package us.hiai.util;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Polygon;
+import org.locationtech.jts.operation.buffer.BufferOp;
+
 import java.util.ArrayList;
 /**
  * Creates polygons on map needed for GPS testing whether in populated area or not
@@ -12,10 +17,10 @@ import java.util.ArrayList;
 public class GPS_Intersection
 {
     public static double PI = 3.14159265;
-    public static double TWOPI = 2*PI;
-    ArrayList<ArrayList<String>> polygons;
-    ArrayList<ArrayList<Double>> lat_array;
-    ArrayList<ArrayList<Double>> long_array;
+    private static double TWO_PI = 2*PI;
+    private ArrayList<ArrayList<String>> polygons;
+    private ArrayList<ArrayList<Double>> lat_array;
+    private ArrayList<ArrayList<Double>> long_array;
 
     public GPS_Intersection() {
         polygons = new ArrayList<>();
@@ -188,8 +193,9 @@ public class GPS_Intersection
             ArrayList<Double> nextLat = new ArrayList<>();
             ArrayList<Double> nextLong = new ArrayList<>();
             for (String s : polygons.get(i)) {
-                nextLat.add(Double.parseDouble(s.split(",")[0]));
-                nextLong.add(Double.parseDouble(s.split(",")[1]));
+                String[] parsed = s.split(",");
+                nextLat.add(Double.parseDouble(parsed[0]));
+                nextLong.add(Double.parseDouble(parsed[1]));
             }
             lat_array.add(nextLat);
             long_array.add(nextLong);
@@ -197,32 +203,79 @@ public class GPS_Intersection
 
     }
 
+    public void convertToJTS() {
+        GeometryFactory gf = new GeometryFactory();
+        Polygon[] myPolys = new Polygon[lat_array.size()];
+        for(int i = 0; i < lat_array.size(); i++) {
+            ArrayList<Double> nextLat = lat_array.get(i);
+            ArrayList<Double> nextLon = long_array.get(i);
+            Coordinate[] coords = new Coordinate[nextLat.size() + 1];
+            for(int j = 0; j < nextLat.size(); j++) {
+                coords[j] = new Coordinate(nextLat.get(j), nextLon.get(j));
+            }
+            coords[coords.length - 1] = new Coordinate(nextLat.get(0), nextLon.get(0));
+            myPolys[i] = new Polygon(gf.createLinearRing(coords), null, gf);
+        }
+        Polygon[] modMyPolys = new Polygon[myPolys.length];
+        for(int i = 0; i < myPolys.length; i++) {
+            modMyPolys[i] = (Polygon)BufferOp.bufferOp(myPolys[i], 1.0/60); //0.0145 0.008997
+        }
+        int count = 0;
+        int index = 1;
+        for(Coordinate nextCoord : modMyPolys[index].getCoordinates()) {
+            System.out.println(nextCoord.x + "," + nextCoord.y);
+        }
+        double min = Double.MAX_VALUE;
+        Coordinate minCoord = null;
+        int ex = -1;
+        for(Coordinate nextCoord : modMyPolys[index].getCoordinates()) {
+            double distance = GeometryLogistics.calculateDistanceToWaypoint(lat_array.get(index).get(0), long_array.get(index).get(0), nextCoord.x, nextCoord.y) / 1852;
+            if (distance < min) {
+                min = distance;
+                minCoord = nextCoord;
+                ex = count;
+            }
+            System.out.println(count++ + ": " + nextCoord.x + "," + nextCoord.y + "    " + distance);
+        }
+        if (minCoord != null) {
+            System.out.println(ex + ": " + minCoord.x + "," + minCoord.y + "     " + min);
+        }
+        System.out.println();
+        for(int i = 0; i < lat_array.get(index).size(); i++) {
+            System.out.println(i + ": " + lat_array.get(index).get(i) + "," + long_array.get(index).get(i));
+        }
+        System.out.println();
+        for(int i = 0; i < lat_array.get(index).size(); i++) {
+            System.out.println(lat_array.get(index).get(i) + "," + long_array.get(index).get(i));
+        }
+    }
 
     public void printIfIsContained(double testLat, double testLong) {
         boolean isContained = coordIsContained(testLat, testLong);
         System.out.println(isContained);
     }
 
-    public boolean coordIsContained(double testLat, double testLong) {
-        boolean isContained = false;
+    public int indexOfContainedCoord(double testLat, double testLong) {
+        int indexOfContained = -1;
         for (int i = 0; i < polygons.size(); i++) {
             if (coordinate_is_inside_polygon(testLat, testLong, lat_array.get(i), long_array.get(i))) {
-                isContained = true;
+                indexOfContained = i;
                 break;
             }
         }
-        return isContained;
+        return indexOfContained;
     }
 
-    // uncomment for testing
+    public boolean coordIsContained(double testLat, double testLong) {
+        return indexOfContainedCoord(testLat, testLong) != -1;
+    }
 
-    /*
     public static void main(String[] args) {
         GPS_Intersection gi = new GPS_Intersection();
-        gi.printIfIsContained(32 + 40.19/60, -1*(97 + 02.98/60));
-
+        //gi.printIfIsContained(32 + 40.19/60, -1*(97 + 02.98/60));
+        gi.convertToJTS();
     }
-    */
+
 
     public static boolean coordinate_is_inside_polygon(
             double latitude, double longitude,
@@ -245,10 +298,7 @@ public class GPS_Intersection
             angle += Angle2D(point1_lat,point1_long,point2_lat,point2_long);
         }
 
-        if (Math.abs(angle) < PI)
-            return false;
-        else
-            return true;
+        return !(Math.abs(angle) < PI);
     }
 
     public static double Angle2D(double y1, double x1, double y2, double x2)
@@ -259,9 +309,9 @@ public class GPS_Intersection
         theta2 = Math.atan2(y2,x2);
         dtheta = theta2 - theta1;
         while (dtheta > PI)
-            dtheta -= TWOPI;
+            dtheta -= TWO_PI;
         while (dtheta < -PI)
-            dtheta += TWOPI;
+            dtheta += TWO_PI;
 
         return(dtheta);
     }

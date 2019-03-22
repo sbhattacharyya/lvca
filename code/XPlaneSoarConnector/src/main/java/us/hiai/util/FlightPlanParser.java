@@ -14,7 +14,7 @@ public class FlightPlanParser {
     public FlightPlan flightPlan;
     public int currentWaypoint;
     private Double currentHeading;
-    private static double EPSILON = 0.01;
+
     public FlightPlanParser(String fmsInputFile) {
         try {
             FMSParser fmsParser = new FMSParser(new CommonTokenStream(new FMSLexer(new ANTLRFileStream(fmsInputFile))));
@@ -27,6 +27,7 @@ public class FlightPlanParser {
     }
 
     public void updateWaypoint(Double heading) {
+        double EPSILON = 0.01;
         if (currentHeading == null) {
             currentHeading = heading;
         } else if (Math.abs(currentHeading - heading) > EPSILON && currentWaypoint + 1 < flightPlan.waypoints.size()) {
@@ -36,7 +37,7 @@ public class FlightPlanParser {
 
     public WaypointNode getCurrentWaypoint() {return flightPlan.waypoints.get(currentWaypoint);}
 
-    public WaypointNode getNextWaypoint() { return flightPlan.waypoints.get(currentWaypoint + 1); }
+    public WaypointNode getHome() { return flightPlan.waypoints.get(0); }
 
     public void reverseWaypoints() {
         flightPlan = new FlightPlan(flightPlan, currentWaypoint);

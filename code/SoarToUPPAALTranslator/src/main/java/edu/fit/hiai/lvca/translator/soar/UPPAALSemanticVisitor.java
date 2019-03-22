@@ -2680,7 +2680,6 @@ public class UPPAALSemanticVisitor extends SoarBaseVisitor<Node> {
             if (systemProcesses.length() > 1) {
                 systemProcesses.append(", ");
             }
-            systemProcesses.append(SoarTranslator.simplifiedString(UAT.getName()));
             addAVToBuilder(SoarTranslator.simplifiedString(UAT.getName()), UAT.getNumValues(), SoarTranslator.simplifiedString(UAT.getOperatorIndex()), UAT.getAttributeIndex(), systemProcesses, instantiationsCollection);
         }
 
