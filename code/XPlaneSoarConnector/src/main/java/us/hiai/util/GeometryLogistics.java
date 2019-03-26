@@ -11,6 +11,7 @@ public class GeometryLogistics {
     private static final double convertToRadians = Math.PI / 180;
     private static final int EARTH_RADIUS = 6371000;
     public static final int NM_METERS = 1852;
+    public static final double INCREMENT = 18.52;
 
     public static double calculateBearing(double planeLat, double planeLong, double otherLat, double otherLon, boolean circleCurrentWYPT, Double distance) {
         double lat1 = planeLat * convertToRadians;
@@ -40,7 +41,6 @@ public class GeometryLogistics {
     }
 
     public static boolean checkLineIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
-        double increment = 18.52;
         double currentDistance = maxDistance;
         double[] destination;
         while (currentDistance > 0) {
@@ -48,13 +48,33 @@ public class GeometryLogistics {
             if(gpsIntersect.coordIsContained(destination[0], destination[1])) {
                 return true;
             }
-            currentDistance -= increment;
+            currentDistance -= INCREMENT;
         }
         if (currentDistance < 0) {
-            destination = calculateDestination(currentLat, currentLong, currentBearing, 0);
-            return gpsIntersect.coordIsContained(destination[0], destination[1]);
+            return gpsIntersect.coordIsContained(currentLat, currentLong);
         }
         return false;
+    }
+
+    public static int countLineIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+        double currentDistance = maxDistance;
+        double[] destination;
+        HashSet<Integer> containedPolygons = new HashSet<>();
+        while (currentDistance > 0) {
+            destination = calculateDestination(currentLat, currentLong, currentBearing, currentDistance);
+            int intersectIndex = gpsIntersect.indexOfContainedCoord(destination[0], destination[1]);
+            if (intersectIndex != -1) {
+                containedPolygons.add(intersectIndex);
+            }
+            currentDistance -= INCREMENT;
+        }
+        if (currentDistance < 0) {
+            int intersectIndex = gpsIntersect.indexOfContainedCoord(currentLat, currentLong);
+            if (intersectIndex != -1) {
+                containedPolygons.add(intersectIndex);
+            }
+        }
+        return containedPolygons.size();
     }
 
     public static boolean willBeInPopulated (double currentLat, double currentLong, double currentBearing, double groundSpeed, GPS_Intersection gpsIntersect) {

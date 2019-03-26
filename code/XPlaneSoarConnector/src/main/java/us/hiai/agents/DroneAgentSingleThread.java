@@ -41,14 +41,14 @@ public class DroneAgentSingleThread
 
     public void start()
     {
-        String flightPlanInputFile = "/home/dgries/X-Plane 11/Output/FMS plans/DallasOut156.fms";
+        String flightPlanInputFile = "/home/dgriessl/X-Plane 11/Output/FMS plans/DallasOut156.fms";
         fpp = new FlightPlanParser(flightPlanInputFile);
 
         gpsIntersect = new GPS_Intersection();
         sagt = new Agent();
         sagt.setName("DroneSingle");
         sagt.getPrinter().pushWriter(new OutputStreamWriter(System.out));
-        String pathToSoar = "/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
+        String pathToSoar = "/home/dgriessl/IdeaProjects/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
         try {
             SoarCommands.source(sagt.getInterpreter(), pathToSoar);
             System.out.printf("%d Productions Loaded!\n", sagt.getProductions().getProductionCount());
