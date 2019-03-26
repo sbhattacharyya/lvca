@@ -266,6 +266,10 @@ public class GPS_Intersection
         return indexOfContained;
     }
 
+    public void shortestPath(double[] plane, double[] destination) {
+        new GraphPath(plane, destination, lat_array, long_array, this);
+    }
+
     public boolean coordIsContained(double testLat, double testLong) {
         return indexOfContainedCoord(testLat, testLong) != -1;
     }

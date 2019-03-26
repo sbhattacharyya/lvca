@@ -1,20 +1,10 @@
 package us.hiai.util;
 
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.PriorityQueue;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.*;
 
 public class GraphPath {
-//    static class Edge {
-//        double weight;
-//        int destination;
-//        public Edge(double weight, int destination) {
-//            this.weight = weight;
-//            this.destination = destination;
-//        }
-//        public int getDestination() { return destination; }
-//    }
-//
     static class Node {
         double lat;
         double lon;
@@ -35,30 +25,13 @@ public class GraphPath {
         public int getPolygonIndex() {
             return polygonIndex;
         }
-//
-//        public boolean containsEdge(int indexOfNode) {
-//            boolean contains = false;
-//            for(Edge nextEdge : edges) {
-//                if (nextEdge.getDestination() == indexOfNode) {
-//                    contains = true;
-//                    break;
-//                }
-//            }
-//            return contains;
-//        }
-//
-//        public Edge addEdge(double distanceToNode, int indexOfNode) {
-//           Edge newEdge = new Edge(distanceToNode, indexOfNode);
-//           edges.add(newEdge);
-//           return newEdge;
-//        }
     }
 
     Node[] elements;
     int[] polygonEnd;
     GPS_Intersection gpsIntersect;
 
-    public GraphPath(double[] plane, double[] destination, LinkedList<ArrayList<Double>> latPolygons, LinkedList<ArrayList<Double>> lonPolygons, GPS_Intersection gpsIntersect) {
+    public GraphPath(double[] plane, double[] destination, ArrayList<ArrayList<Double>> latPolygons, ArrayList<ArrayList<Double>> lonPolygons, GPS_Intersection gpsIntersect) {
         this.gpsIntersect = gpsIntersect;
         int size = 2;
         for (ArrayList<Double> nextList : latPolygons) {
@@ -78,47 +51,76 @@ public class GraphPath {
         }
         elements[elements.length - 1] = new Node(destination[0], destination[1], -2);
 
-        double graph[][] = new double[size][size];
-        for (int i = 0; i < graph.length; i++) {
-            for (int j = 0; j < graph.length; j++) {
-                graph[i][j] = -1;
-            }
+        LinkedList<LinkedList<Pair>> graph = new LinkedList<>();
+        for (int i = 0; i < size; i++) {
+            graph.add(new LinkedList<>());
         }
         for(int i = 0; i < elements.length; i++) {
             for (int j = 0; j < elements.length; j++) {
-                if (j != i && elements[j].getPolygonIndex() != elements[i].getPolygonIndex() && graph[i][j] == -1) {
+                if (j != i && elements[j].getPolygonIndex() != elements[i].getPolygonIndex() && graph.get(i).get(j).node == -1) {
                     addEdge(i, j, graph);
                 }
             }
         }
 
+        double[] distances = dijkstra(graph, 0, size);
 
+        System.out.println("The shorted path from node :");
+        for (int i = 0; i < distances.length; i++)
+            System.out.println(0 + " to " + i + " is "
+                    + distances[i]);
     }
 
-    private void addEdge(int indexNode1, int indexNode2, double graph[][]) {
+    private void addEdge(int indexNode1, int indexNode2, LinkedList<LinkedList<Pair>> graph) {
         double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(elements[indexNode1].getLat(), elements[indexNode1].getLon(), elements[indexNode2].getLat(), elements[indexNode2].getLon());
         double currentBearing = GeometryLogistics.calculateBearing(elements[indexNode1].getLat(), elements[indexNode1].getLon(), elements[indexNode2].getLat(), elements[indexNode2].getLon(), false, null);
         if (!GeometryLogistics.checkLineIntersectsPolygon(elements[indexNode1].getLat(), elements[indexNode1].getLon(), currentBearing, distanceToNode, gpsIntersect)) {
-//            elements[indexNode1].addEdge(distanceToNode, indexNode2);
-//            elements[indexNode2].addEdge(distanceToNode, indexNode1);
-            graph[indexNode1][indexNode2] = distanceToNode;
-            graph[indexNode2][indexNode1] = distanceToNode;
+            graph.get(indexNode1).add(new Pair(indexNode2, distanceToNode));
+            graph.get(indexNode2).add(new Pair(indexNode1, distanceToNode));
         }
     }
 
-    static class Pair {
+    static class Pair implements Comparable<Pair> {
         int node;
         double distance;
-        Pair(int node, double distance)
+        Pair(int node, double distance) {
+            this.node = node;
+            this.distance = distance;
+        }
+
+        @Override
+        public int compareTo(@NotNull Pair otherPair) {
+            return Double.compare(this.distance, otherPair.distance);
+        }
     }
 
-    private void dijkstra(double graph[][], int src) {
-        double dist[] = new double[graph.length];
+    private double[] dijkstra(LinkedList<LinkedList<Pair>> graph, int src, int maxSize) {
+        double[] dist = new double[graph.size()];
         dist[0] = 0;
         for (int i = 1; i < dist.length; i++) {
             dist[i] = Double.MAX_VALUE;
         }
-        PriorityQueue<Node>
+        PriorityQueue<Pair> pq = new PriorityQueue<>(maxSize);
+        pq.add(new Pair(src, 0));
+
+        Set<Integer> settled = new HashSet<>();
+        while (settled.size() != maxSize) {
+            int u = pq.remove().node;
+            settled.add(u);
+            double edgeDistance = -1;
+            double newDistance = -1;
+            for (int i = 0; i < graph.get(u).size(); i++) {
+                Pair v = graph.get(u).get(i);
+                if (!settled.contains(v.node)) {
+                    edgeDistance = v.distance;
+                    newDistance = dist[u] + edgeDistance;
+                    if (newDistance < dist[v.node])
+                        dist[v.node] = newDistance;
+                    pq.add(new Pair(v.node, dist[v.node]));
+                }
+            }
+        }
+        return dist;
     }
 
 }
