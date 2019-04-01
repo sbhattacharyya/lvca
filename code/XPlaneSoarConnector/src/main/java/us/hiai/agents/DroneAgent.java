@@ -48,7 +48,7 @@ public class DroneAgent
     public GPS_Intersection gpsIntersect;
     public void start()
     {
-        gpsIntersect = new GPS_Intersection();
+        gpsIntersect = new GPS_Intersection("/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
         threaded = ThreadedAgent.create();
         threaded.setName("Drone");
         threaded.getPrinter().pushWriter(new OutputStreamWriter(System.out));

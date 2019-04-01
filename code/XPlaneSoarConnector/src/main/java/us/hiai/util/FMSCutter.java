@@ -32,28 +32,10 @@ public class FMSCutter extends FMSBaseVisitor<FlightPlan> {
 
     @Override public FlightPlan visitWaypoint(FMSParser.WaypointContext ctx) {
         if (ctx.Sym_constant() != null) {
-            fp.addWaypoint(new WaypointNode(ctx.Sym_constant().getText()));
-            ctx.type().accept(this);
-            ctx.altitude().accept(this);
+            fp.addWaypoint(new WaypointNode());
             ctx.latitude().accept(this);
             ctx.longitude().accept(this);
         }
-        return null;
-    }
-
-    @Override public FlightPlan visitType(FMSParser.TypeContext ctx) {
-        fp.waypoints.getLast().setType(Integer.parseInt(ctx.Int_constant().getText()));
-        return null;
-    }
-
-    @Override public FlightPlan visitAltitude(FMSParser.AltitudeContext ctx) {
-        float altitude;
-        if (ctx.Int_constant() != null) {
-            altitude = Float.parseFloat(ctx.Int_constant().getText());
-        } else {
-            altitude = Float.parseFloat(ctx.Float_constant().getText());
-        }
-        fp.waypoints.getLast().setAltitude(altitude);
         return null;
     }
 

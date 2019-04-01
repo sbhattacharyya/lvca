@@ -10,16 +10,11 @@ public class FlightPlan {
     FlightPlan() {
         waypoints = new LinkedList<>();
     }
-    FlightPlan(FlightPlan copy, int lastWaypoint) {
+    FlightPlan(LinkedList<WaypointNode> pathHome, FlightPlan copy) {
         this.builder = copy.builder;
         this.versionNumber = copy.versionNumber;
         this.numberOfUserDefinedWaypoints = copy.numberOfUserDefinedWaypoints;
-        waypoints = new LinkedList<>();
-        if (lastWaypoint < copy.waypoints.size()) {
-            for(int i = lastWaypoint; i >= 0; i--) {
-                waypoints.add(copy.waypoints.get(i));
-            }
-        }
+        waypoints = pathHome;
     }
     public void addWaypoint(WaypointNode newWaypointNode) {
         waypoints.add(newWaypointNode);

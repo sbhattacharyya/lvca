@@ -1,5 +1,6 @@
 package us.hiai.util;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.LinkedList;
 
@@ -56,25 +57,29 @@ public class GeometryLogistics {
         return false;
     }
 
-    public static int countLineIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+    public static double countDistanceIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
         double currentDistance = maxDistance;
         double[] destination;
-        HashSet<Integer> containedPolygons = new HashSet<>();
+        double distanceIntersected = 0;
+        int runningIntersections = 0;
         while (currentDistance > 0) {
             destination = calculateDestination(currentLat, currentLong, currentBearing, currentDistance);
             int intersectIndex = gpsIntersect.indexOfContainedCoord(destination[0], destination[1]);
             if (intersectIndex != -1) {
-                containedPolygons.add(intersectIndex);
+                runningIntersections++;
+            } else if (runningIntersections != 0) {
+                distanceIntersected += INCREMENT*runningIntersections;
+                runningIntersections = 0;
             }
             currentDistance -= INCREMENT;
         }
         if (currentDistance < 0) {
             int intersectIndex = gpsIntersect.indexOfContainedCoord(currentLat, currentLong);
             if (intersectIndex != -1) {
-                containedPolygons.add(intersectIndex);
+                distanceIntersected += INCREMENT;
             }
         }
-        return containedPolygons.size();
+        return distanceIntersected;
     }
 
     public static boolean willBeInPopulated (double currentLat, double currentLong, double currentBearing, double groundSpeed, GPS_Intersection gpsIntersect) {

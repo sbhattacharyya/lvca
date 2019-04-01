@@ -6,6 +6,7 @@ import antlr4.FMSLexer;
 import antlr4.FMSParser;
 
 import java.io.IOException;
+import java.util.LinkedList;
 
 /** Parses provided .fms flight plan
  * Created by Daniel Griessler Spring 2019
@@ -39,8 +40,8 @@ public class FlightPlanParser {
 
     public WaypointNode getHome() { return flightPlan.waypoints.get(0); }
 
-    public void reverseWaypoints() {
-        flightPlan = new FlightPlan(flightPlan, currentWaypoint);
+    public void reverseWaypoints(LinkedList<WaypointNode> pathHome) {
+        flightPlan = new FlightPlan(pathHome, flightPlan);
         currentWaypoint = 0;
         currentHeading = null;
     }

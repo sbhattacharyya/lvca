@@ -10,10 +10,7 @@ import org.jsoar.kernel.symbols.SymbolFactory;
 import org.jsoar.util.adaptables.Adaptables;
 import org.jsoar.util.commands.SoarCommands;
 import us.hiai.data.FlightData;
-import us.hiai.util.FlightPlanParser;
-import us.hiai.util.GPS_Intersection;
-import us.hiai.util.GeometryLogistics;
-import us.hiai.util.WaypointNode;
+import us.hiai.util.*;
 import us.hiai.xplane.XPlaneConnector;
 
 import java.io.*;
@@ -34,6 +31,7 @@ public class DroneAgentSingleThread
     private boolean takeOver = false;
     private Agent sagt;
     private GPS_Intersection gpsIntersect;
+    private GraphPath flightWeb;
     private FlightPlanParser fpp;
     private double currentBearing = -1;
     private FlightData data;
@@ -41,14 +39,15 @@ public class DroneAgentSingleThread
 
     public void start()
     {
-        String flightPlanInputFile = "/home/dgriessl/X-Plane 11/Output/FMS plans/DallasOut156.fms";
+        String flightPlanInputFile = "/home/dgries/X-Plane 11/Output/FMS plans/DallasOut156.fms";
         fpp = new FlightPlanParser(flightPlanInputFile);
+        gpsIntersect = new GPS_Intersection("/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
+        flightWeb = gpsIntersect.shortestPath(new double[]{fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()});
 
-        gpsIntersect = new GPS_Intersection();
         sagt = new Agent();
         sagt.setName("DroneSingle");
         sagt.getPrinter().pushWriter(new OutputStreamWriter(System.out));
-        String pathToSoar = "/home/dgriessl/IdeaProjects/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
+        String pathToSoar = "/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
         try {
             SoarCommands.source(sagt.getInterpreter(), pathToSoar);
             System.out.printf("%d Productions Loaded!\n", sagt.getProductions().getProductionCount());
@@ -121,7 +120,6 @@ public class DroneAgentSingleThread
                 switch(dref) {
                     case "sim/cockpit/autopilot/autopilot_mode":
                         setValueOnSim(dref, (float)setValue.asInteger().getValue());
-                        gpsIntersect.shortestPath(new double[]{data.lat, data.lon}, new double[]{fpp.getHome().getLatitude(), fpp.getHome().getLongitude()});
                         // ADD SEND DREF TO MAKE SURE NAVIGATION IS BY GPS
                         break;
                     case "null" :
@@ -160,32 +158,11 @@ public class DroneAgentSingleThread
 
     private void returnToHome() {
         // change flightPlan back to private in FlightPlanParser
-        fpp.reverseWaypoints();
+        LinkedList<WaypointNode> pathHome = flightWeb.findPathHome(data.lat, data.lon);
+        fpp.reverseWaypoints(pathHome);
         currentBearing = 0;
         if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
             circleCurrentWYPT = true;
-    }
-
-    private void findPath(double planeLat, double planeLon, double currentBearing) {
-        LinkedList<double[]> pathToHome = new LinkedList<>();
-        pathToHome.add(new double[]{planeLat, planeLon});
-        WaypointNode home = fpp.getHome();
-
-        double distanceToHome = GeometryLogistics.calculateDistanceToWaypoint(planeLat, planeLon, home.getLatitude(), home.getLongitude());
-        HashSet<Integer> intersectedPolygonIndexes = new HashSet<>();
-        for (double i = 0; i < distanceToHome; i = i + 1.0 / distanceToHome) {
-            double[] destinationPoint = GeometryLogistics.calculateDestination(planeLat, planeLon, currentBearing, i);
-            int intersectedIndex = gpsIntersect.indexOfContainedCoord(destinationPoint[0], destinationPoint[1]);
-            if (intersectedIndex != -1) {
-                intersectedPolygonIndexes.add(intersectedIndex);
-            }
-        }
-
-        if (intersectedPolygonIndexes.size() != 0) {
-
-        }
-
-        pathToHome.add(new double[]{home.getLatitude(), home.getLongitude()});
     }
 
     private void pushFlightData()
