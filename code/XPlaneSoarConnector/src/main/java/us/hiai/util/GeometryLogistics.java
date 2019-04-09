@@ -57,27 +57,35 @@ public class GeometryLogistics {
         return false;
     }
 
-    public static double countDistanceIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+    public static double[] countDistanceIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
         double currentDistance = maxDistance;
         double[] destination;
-        double distanceIntersected = 0;
-        int runningIntersections = 0;
+        double[] distanceIntersected = new double[2];
+        int[] runningIntersections = new int[2];
         while (currentDistance > 0) {
             destination = calculateDestination(currentLat, currentLong, currentBearing, currentDistance);
-            int intersectIndex = gpsIntersect.indexOfContainedCoord(destination[0], destination[1]);
-            if (intersectIndex != -1) {
-                runningIntersections++;
-            } else if (runningIntersections != 0) {
-                distanceIntersected += INCREMENT*runningIntersections;
-                runningIntersections = 0;
+            int[] intersectIndex = gpsIntersect.indexOfContainedCoord(destination[0], destination[1]);
+            if (intersectIndex[0] != -1) {
+                runningIntersections[intersectIndex[1]]++;
+            } else  {
+                runningIntersections[1] += runningIntersections[0];
+                for (int i = 0; i < runningIntersections.length; i++) {
+                    if (runningIntersections[i] != 0) {
+                        distanceIntersected[i] += INCREMENT * runningIntersections[i];
+                        runningIntersections[i] = 0;
+                    }
+                }
             }
             currentDistance -= INCREMENT;
         }
-        if (currentDistance < 0) {
-            int intersectIndex = gpsIntersect.indexOfContainedCoord(currentLat, currentLong);
-            if (intersectIndex != -1) {
-                distanceIntersected += INCREMENT;
-            }
+        int[] intersectIndex = gpsIntersect.indexOfContainedCoord(currentLat, currentLong);
+        if (intersectIndex[0] != -1) {
+            runningIntersections[intersectIndex[1]]++;
+        }
+        runningIntersections[1] += runningIntersections[0];
+        for (int i = 0; i < runningIntersections.length; i++) {
+            if (runningIntersections[i] != 0)
+                distanceIntersected[i] += INCREMENT * runningIntersections[i];
         }
         return distanceIntersected;
     }

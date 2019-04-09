@@ -1,6 +1,7 @@
 package us.hiai.util;
 
 import org.jetbrains.annotations.NotNull;
+import sun.misc.DoubleConsts;
 import us.hiai.util.Data_Structures_Book.Entry;
 import us.hiai.util.Data_Structures_Book.HeapAdaptablePriorityQueue;
 
@@ -9,6 +10,9 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Created by Daniel Griessler Spring 2019
@@ -38,13 +42,24 @@ public class GraphPath {
     }
 
     private Node[] elements;
-    private int[] polygonEnd;
     private GPS_Intersection gpsIntersect;
     private DoubInt[] nonPopulatedToHome;
     private DoubInt[] populatedToHome;
     private HashSet<Integer> hasNonpopulatedPathHome;
 
-    public GraphPath(double[] home, GPS_Intersection gpsIntersect, String pathToPolygons) {
+    int[] fillElements(int currentIndex, ArrayList<ArrayList<Double>> latArray, ArrayList<ArrayList<Double>> lonArray, int polygon) {
+        for (int i = 0; i < latArray.size(); i++) {
+            int currentSize = lonArray.get(i).size();
+            for (int j = 0; j < currentSize; j++) {
+                elements[currentIndex++] = new Node(latArray.get(i).get(j), lonArray.get(i).get(j), polygon);
+            }
+//            polygonEnd[polygonEndIndex++] = currentIndex - 1;
+            polygon++;
+        }
+        return new int[]{currentIndex, /*polygonEndIndex,*/ polygon};
+    }
+
+    GraphPath(double[] home, GPS_Intersection gpsIntersect, String pathToPolygons) {
         this.gpsIntersect = gpsIntersect;
         File stored = new File(pathToPolygons + "/storedGraphPath.txt");
         try {
@@ -59,6 +74,9 @@ public class GraphPath {
                 for (ArrayList<Double> nextList : gpsIntersect.getLatArray()) {
                     size += nextList.size();
                 }
+                for (ArrayList<Double> nextList : gpsIntersect.getLightlyPopulatedLatArray()) {
+                    size += nextList.size();
+                }
             } else {
                 System.out.printf("Found storedGraphPath.txt in %s\n", pathToPolygons);
                 System.out.println("Loading storedGraphPath.txt....");
@@ -66,36 +84,40 @@ public class GraphPath {
                 size = reader.nextInt();
             }
             elements = new Node[size];
-            polygonEnd = new int[gpsIntersect.getLatArray().size()];
             elements[0] = new Node(home[0], home[1], -1);
-            int index = 1;
-            int indexEnd = 0;
-            for (int i = 0; i < gpsIntersect.getLatArray().size(); i++) {
-                int currentSize = gpsIntersect.getLatArray().get(i).size();
-                for (int j = 0; j < currentSize; j++) {
-                    elements[index++] = new Node(gpsIntersect.getLatArray().get(i).get(j), gpsIntersect.getLonArray().get(i).get(j), i);
-                }
-                polygonEnd[indexEnd++] = index - 1;
-            }
+            int[] currentIndexAndPolygonIndex = fillElements(1, gpsIntersect.getLatArray(), gpsIntersect.getLonArray(), 0);
+            fillElements(currentIndexAndPolygonIndex[0], gpsIntersect.getLightlyPopulatedLatArray(), gpsIntersect.getLightlyPopulatedLonArray(), currentIndexAndPolygonIndex[1]);
 
 
             if (createdNewFile) {
                 ArrayList<ArrayList<Pair>> graph = new ArrayList<>();
+                Pair[][] graphMatrix = new Pair[size][size];
                 for (int i = 0; i < size; i++) {
                     graph.add(new ArrayList<>());
                 }
-                for (int i = 0; i < elements.length; i++) {
-                    for (int j = 0; j < elements.length; j++) {
-                        if (j == i || elements[j].getPolygonIndex() == elements[i].getPolygonIndex()) {
-                            if (elements[j].getPolygonIndex() != -1)
-                                j = polygonEnd[elements[j].getPolygonIndex()];
-                            continue;
-                        }
-                        if (graph.get(i).contains(new Pair(j, -1))) {
-                            // I think this is sorted so you should be able to do a binary search instead of contains check
-                            addEdge(i, j, graph);
+                double totalTime = System.nanoTime();
+                LinkedList<Future<PackedArgs>> futures = new LinkedList<>();
+                long startIndex = 0;
+                long iteration = Math.round(elements.length / 5.0);
+                for (int i = 0; i < 4; i++) {
+                    long sum = startIndex + iteration;
+                    System.out.println(startIndex + " " + sum + " " + elements.length);
+                        Future<PackedArgs> ff = Executors.newSingleThreadExecutor().submit(new edgeCreator(startIndex, sum, graph, graphMatrix, elements, gpsIntersect));
+                        futures.add(ff);
+                        startIndex += iteration;
+                }
+                System.out.println(startIndex + " " + elements.length + " " + elements.length);
+                new edgeCreator(startIndex, elements.length, graph, graphMatrix, elements, gpsIntersect).call();
+                System.out.printf("Main finished in %f time\n", (System.nanoTime() - totalTime) / 6e+10);
+                while (futures.size() != 0) {
+                    for (int i = 0; i < futures.size(); i++) {
+                        if (futures.get(i).isDone()) {
+                            futures.remove(i);
+                            i--;
+                            System.out.printf("Future %d finished in %f time\n", i, (System.nanoTime() - totalTime) / 6e+10); // have done threads start back up and help the threads that are still running dummy and perhaps more below with the dijkstra?
                         }
                     }
+                    Thread.sleep(120000);
                 }
                 nonPopulatedToHome = dijkstra(graph, size);
                 writer =  new BufferedWriter(new FileWriter(stored));
@@ -105,33 +127,10 @@ public class GraphPath {
                     writer.write(nonPopulatedToHome[i].backNode + " " + nonPopulatedToHome[i].distance + " ");
                 }
 
-//                if (distances[distances.length - 1].distance == Double.MAX_VALUE) {
-                Pair[][] graphMatrix = new Pair[size][size];
-                for (int i = 0; i < graph.size(); i++) {
-                    boolean[] touched = new boolean[size];
-                    ArrayList<Pair> currentEdges = graph.get(i);
-                    for(Pair next : currentEdges) {
-                        graphMatrix[i][next.node] = next;
-                        touched[next.node] = true;
-                    }
-                    for (int j = 0; j < touched.length; j++) {
-                        if (!touched[j]) {
-                            graphMatrix[i][j] = null;
-                        }
-                    }
-                }
-                for (int i = 0; i < elements.length; i++) {
-                    for (int j = 0; j < elements.length; j++) {
-                        if (j != i && graphMatrix[i][j] == null) {
-                            addPopulatedEdge(i, j, graphMatrix);
-                        }
-                    }
-                }
-
                 populatedToHome = dijkstra(graphMatrix, size);
 
                 for (int i = 0; i < populatedToHome.length; i++) {
-                    writer.write(populatedToHome[i].backNode + " " + populatedToHome[i].distance + " " + populatedToHome[i].distanceOverPopulated + " ");
+                    writer.write(populatedToHome[i].backNode + " " + populatedToHome[i].distance + " " + populatedToHome[i].distanceOverPopulated[0] + " " + populatedToHome[i].distanceOverPopulated[1] + " ");
                 }
                 writer.close();
 
@@ -142,7 +141,7 @@ public class GraphPath {
                 }
                 populatedToHome = new DoubInt[size];
                 for (int i = 0; i < size; i++) {
-                    populatedToHome[i] = new DoubInt(reader.nextInt(), reader.nextDouble(), reader.nextDouble());
+                    populatedToHome[i] = new DoubInt(reader.nextInt(), reader.nextDouble(), new double[]{reader.nextDouble(), reader.nextDouble()});
                 }
                 reader.close();
                 System.out.println("storedGraphPath.txt Loaded");
@@ -155,45 +154,71 @@ public class GraphPath {
                     hasNonpopulatedPathHome.add(i);
                 }
             }
-        } catch (IOException e) {
+
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }
 
-    private double[] getDistanceAndBearing(double lat1, double lon1, double lat2, double lon2) {
-        double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(lat1, lon1, lat2, lon2);
-        double currentBearing = GeometryLogistics.calculateBearing(lat1, lon1, lat2, lon2, false, null);
-        return new double[]{distanceToNode, currentBearing};
-    }
-
-    private void addEdge(int indexNode1, int indexNode2, ArrayList<ArrayList<Pair>> graph) {
-        double[] distanceAndBearing = getDistanceAndBearing(elements[indexNode1].getLat(), elements[indexNode1].getLon(), elements[indexNode2].getLat(), elements[indexNode2].getLon());
-        if (!GeometryLogistics.checkLineIntersectsPolygon(elements[indexNode1].getLat(), elements[indexNode1].getLon(), distanceAndBearing[1], distanceAndBearing[0], gpsIntersect)) {
-            graph.get(indexNode1).add(new Pair(indexNode2, distanceAndBearing[0]));
-//            graph.get(indexNode2).add(new Pair(indexNode1, distanceAndBearing[0]));
+    static class PackedArgs {
+        int firstIndex;
+        int secondIndex;
+        ArrayList<ArrayList<Pair>> myGraph;
+        Pair[][] myGraphMatrix;
+        Node[] myElements;
+        GPS_Intersection myIntersect;
+        PackedArgs(long firstIndex, long secondIndex, ArrayList<ArrayList<Pair>> myGraph, Pair[][] myGraphMatrix, Node[] myElements, GPS_Intersection myIntersect) {
+            this.firstIndex = (int)firstIndex;
+            this.secondIndex = (int)secondIndex;
+            this.myGraph = myGraph;
+            this.myGraphMatrix = myGraphMatrix;
+            this.myElements = myElements;
+            this.myIntersect = myIntersect;
         }
     }
 
-    private void addPopulatedEdge(int indexNode1, int indexNode2, Pair[][] graphMatrix) {
-        double[] distanceAndBearing = getDistanceAndBearing(elements[indexNode1].getLat(), elements[indexNode1].getLon(), elements[indexNode2].getLat(), elements[indexNode2].getLon());
-        double distanceIntersectsPolygon = GeometryLogistics.countDistanceIntersectsPolygon(elements[indexNode1].getLat(), elements[indexNode1].getLon(), distanceAndBearing[1], distanceAndBearing[0], gpsIntersect);
-        graphMatrix[indexNode1][indexNode2] = new Pair(indexNode2, distanceAndBearing[0], distanceIntersectsPolygon);
-        graphMatrix[indexNode2][indexNode1] = new Pair(indexNode1, distanceAndBearing[0], distanceIntersectsPolygon);
+    static class edgeCreator implements Callable<PackedArgs> {
+        PackedArgs input;
+        edgeCreator(long firstIndex, long secondIndex, ArrayList<ArrayList<Pair>> myGraph, Pair[][] myGraphMatrix, Node[] myElements, GPS_Intersection myIntersect) {
+            input = new PackedArgs(firstIndex, secondIndex, myGraph, myGraphMatrix, myElements, myIntersect);
+        }
+        @Override
+        public PackedArgs call() {
+            for (int i = input.firstIndex; i < input.secondIndex; i++) {
+                for (int j = i+1; j < input.myElements.length; j++) { // 46853.76019194752   155.63187714189166
+                    double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(input.myElements[i].getLat(), input.myElements[i].getLon(), input.myElements[j].getLat(), input.myElements[j].getLon());
+                    double currentBearing = GeometryLogistics.calculateBearing(input.myElements[i].getLat(), input.myElements[i].getLon(), input.myElements[j].getLat(), input.myElements[j].getLon(), false, null);
+                    double[] distanceIntersectsPolygon = GeometryLogistics.countDistanceIntersectsPolygon(input.myElements[i].getLat(), input.myElements[i].getLon(), currentBearing, distanceToNode, input.myIntersect);
+                    input.myGraphMatrix[i][j] = new Pair(j, distanceToNode, distanceIntersectsPolygon);
+                    input.myGraphMatrix[j][i] = new Pair(i, distanceToNode, distanceIntersectsPolygon);
+                    if (distanceIntersectsPolygon[0] < EPSILON) {
+                        input.myGraph.get(i).add(new Pair(j, distanceToNode));
+                        input.myGraph.get(j).add(new Pair(i, distanceToNode));
+                    }
+                }
+            }
+            return null;
+        }
     }
+
     private static final double EPSILON = 1;
     static class Pair implements Comparable<Pair> {
         int node;
         double distance;
-        double distanceOverPopulated;
+        double[] distanceOverEachArea;
         Pair(int node, double distance) {
             this.node = node;
             this.distance = distance;
-            this.distanceOverPopulated = 0;
+            this.distanceOverEachArea = new double[2];
         }
-        Pair(int node, double distance, double distanceOverPopulated) {
+        Pair(int node, double distance, double[] distanceOverEachArea) {
             this.node = node;
             this.distance = distance;
-            this.distanceOverPopulated = distanceOverPopulated;
+            if (distanceOverEachArea == null) {
+                this.distanceOverEachArea = new double[2];
+            } else {
+                this.distanceOverEachArea = new double[]{distanceOverEachArea[0], distanceOverEachArea[1]};
+            }
         }
         @Override
         public int compareTo(@NotNull Pair otherPair) {
@@ -202,10 +227,16 @@ public class GraphPath {
             } else if (this.node > otherPair.node) {
                 return 1;
             } else {
-                if (Math.abs(this.distanceOverPopulated - otherPair.distanceOverPopulated) < EPSILON) {
-                    return Double.compare(this.distance, otherPair.distance);
+                if (Math.abs(this.distanceOverEachArea[0] - otherPair.distanceOverEachArea[0]) < EPSILON) {
+                    if (Math.abs(this.distanceOverEachArea[1] - otherPair.distanceOverEachArea[1]) < EPSILON) {
+                        return Double.compare(this.distance, otherPair.distance);
+                    } else if (this.distanceOverEachArea[1] < otherPair.distanceOverEachArea[1]) {
+                        return -1;
+                    } else {
+                        return 1;
+                    }
                 }
-                else if (this.distanceOverPopulated < otherPair.distanceOverPopulated) {
+                else if (this.distanceOverEachArea[0] < otherPair.distanceOverEachArea[0]) {
                     return -1;
                 } else {
                     return 1;
@@ -216,7 +247,7 @@ public class GraphPath {
 
     private DoubInt[] dijkstra(ArrayList<ArrayList<Pair>> graph, int maxSize) {
         DoubInt[] dist = new DoubInt[graph.size()];
-        dist[0] = new DoubInt(0, 0.0);
+        dist[0] = new DoubInt(-2, 0.0);
         for (int i = 1; i < dist.length; i++) {
             dist[i] = new DoubInt(-1, Double.MAX_VALUE);
         }
@@ -253,29 +284,53 @@ public class GraphPath {
         return dist;
     }
 
-    static class DoubInt {
+    static class DoubInt implements Comparable<DoubInt> {
         int backNode;
         double distance;
-        Double distanceOverPopulated;
+        double[] distanceOverPopulated;
         DoubInt(int backNode, double distance) {
             this(backNode, distance, null);
         }
-        DoubInt(int backNode, double distance, Double distanceOverPopulated) {
+        DoubInt(int backNode, double distance, double[] distanceOverPopulated) {
             this.backNode = backNode;
             this.distance = distance;
-            this.distanceOverPopulated = distanceOverPopulated;
+            if (distanceOverPopulated == null) {
+                this.distanceOverPopulated = null;
+            } else {
+                this.distanceOverPopulated = new double[]{distanceOverPopulated[0], distanceOverPopulated[1]};
+            }
+        }
+        @Override
+        public int compareTo(@NotNull DoubInt otherDoubInt) {
+            if (distanceOverPopulated == null) {
+                return Double.compare(this.distance, otherDoubInt.distance);
+            }
+            if (Math.abs(this.distanceOverPopulated[0] - otherDoubInt.distanceOverPopulated[0]) < EPSILON) {
+                if (Math.abs(this.distanceOverPopulated[1] - otherDoubInt.distanceOverPopulated[1]) < EPSILON) {
+                    return Double.compare(this.distance, otherDoubInt.distance);
+                } else if (this.distanceOverPopulated[1] < otherDoubInt.distanceOverPopulated[1]) {
+                    return -1;
+                } else {
+                    return 1;
+                }
+            }
+            else if (this.distanceOverPopulated[0] < otherDoubInt.distanceOverPopulated[0]) {
+                return -1;
+            } else {
+                return 1;
+            }
         }
     }
 
     private DoubInt[] dijkstra(Pair[][] graphMatrix, int maxSize) {
         DoubInt[] dist = new DoubInt[graphMatrix.length];
-        dist[0] = new DoubInt(-1, 0.0, 0.0);
+        dist[0] = new DoubInt(-2, 0.0, new double[]{0.0, 0.0});
         for (int i = 1; i < dist.length; i++) {
-            dist[i] = new DoubInt(-1, Double.MAX_VALUE, Double.MAX_VALUE);
+            dist[i] = new DoubInt(-1, Double.MAX_VALUE, new double[]{Double.MAX_VALUE, Double.MAX_VALUE});
         }
 
         HeapAdaptablePriorityQueue<Integer,Pair> pq = new HeapAdaptablePriorityQueue<>();
-        Entry<Integer, Pair> inserted = pq.insert(0, new Pair(0, 0, 0));
+        Entry<Integer, Pair> inserted = pq.insert(0, new Pair(0, 0, new double[]{0, 0}));
         HashMap<Integer,Entry<Integer, Pair>> insertedPairs = new HashMap<>();
         insertedPairs.put(0, inserted);
 
@@ -285,9 +340,8 @@ public class GraphPath {
             int u = min.getKey();
             settled.add(u);
             double edgeDistance;
-            double newDistance;
-            double distanceOverPopulated;
-            double newDistanceOverPopulated;
+            double[] distanceOverPopulated;
+            DoubInt temp = new DoubInt(-2, -1, new double[]{0.0, 0.0});
             for (int i = 0; i < graphMatrix[u].length; i++) {
                 Pair v = graphMatrix[u][i];
                 if (v == null) {
@@ -295,13 +349,15 @@ public class GraphPath {
                 }
                 if (!settled.contains(v.node)) {
                     edgeDistance = v.distance;
-                    distanceOverPopulated = v.distanceOverPopulated;
-                    newDistance = dist[u].distance + edgeDistance;
-                    newDistanceOverPopulated = dist[u].distanceOverPopulated + distanceOverPopulated;
-                    if (newDistanceOverPopulated < dist[v.node].distanceOverPopulated || (Math.abs(newDistanceOverPopulated - dist[v.node].distanceOverPopulated) < EPSILON && newDistance < dist[v.node].distance)) {
+                    distanceOverPopulated = v.distanceOverEachArea;
+                    temp.distance = dist[u].distance + edgeDistance;
+                    temp.distanceOverPopulated[0] = dist[u].distanceOverPopulated[0] + distanceOverPopulated[0];
+                    temp.distanceOverPopulated[1] = dist[u].distanceOverPopulated[1] + distanceOverPopulated[1];
+                    if (temp.compareTo(dist[v.node]) < 0) {
                         dist[v.node].backNode = u;
-                        dist[v.node].distance = newDistance;
-                        dist[v.node].distanceOverPopulated = newDistanceOverPopulated;
+                        dist[v.node].distance = temp.distance;
+                        dist[v.node].distanceOverPopulated[0] = temp.distanceOverPopulated[0];
+                        dist[v.node].distanceOverPopulated[1] = temp.distanceOverPopulated[1];
                     }
                     if (insertedPairs.get(v.node) == null) {
                         Entry<Integer, Pair> newInsert = pq.insert(v.node, new Pair(v.node, dist[v.node].distance, dist[v.node].distanceOverPopulated));
@@ -329,37 +385,48 @@ public class GraphPath {
         return path;
     }
 
+    private double[] getDistanceAndBearing(double lat1, double lon1, double lat2, double lon2) {
+        double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(lat1, lon1, lat2, lon2);
+        double currentBearing = GeometryLogistics.calculateBearing(lat1, lon1, lat2, lon2, false, null);
+        return new double[] {distanceToNode, currentBearing};
+    }
+
     public LinkedList<WaypointNode> findPathHome(double planeLat, double planeLon) {
+        double startTime = System.nanoTime();
         double minDistanceHome = Double.MAX_VALUE;
         int nodeHome = -1;
-        LinkedList<WaypointNode> directionsHome = null;
+        LinkedList<WaypointNode> directionsHome;
         for (Integer node : hasNonpopulatedPathHome) {
             double[] distanceAndBearing = getDistanceAndBearing(planeLat, planeLon, elements[node].getLat(), elements[node].getLon());
             if (!GeometryLogistics.checkLineIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect)) {
-                minDistanceHome = Math.min(minDistanceHome, distanceAndBearing[0] + nonPopulatedToHome[node].distance);
-                nodeHome = node;
+                double sumDist = distanceAndBearing[0] + nonPopulatedToHome[node].distance;
+                if (sumDist < minDistanceHome) {
+                    minDistanceHome = sumDist;
+                    nodeHome = node;
+                }
             }
         }
         if (nodeHome == -1) {
-            minDistanceHome = Double.MAX_VALUE;
+            double[] minIntersects = new double[]{Double.MAX_VALUE, Double.MAX_VALUE};
+            double[] sumDistance = new double[2];
             for (int i = 0; i < populatedToHome.length; i++) {
                 double[] distanceAndBearing = getDistanceAndBearing(planeLat, planeLon, elements[i].getLat(), elements[i].getLon());
-                double distanceIntersectsPolygon = GeometryLogistics.countDistanceIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect);
-                double sumDistance = distanceIntersectsPolygon + populatedToHome[i].distanceOverPopulated;
-                if (sumDistance < minDistanceHome) {
-                    directionsHome = backTrace(populatedToHome, i);
-                    if (directionsHome != null) {
-                        minDistanceHome = sumDistance;
-                        nodeHome = i;
-                    }
+                double[] distanceIntersectsPolygon = GeometryLogistics.countDistanceIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect);
+                sumDistance[0] = distanceIntersectsPolygon[0] + populatedToHome[i].distanceOverPopulated[0];
+                sumDistance[1] = distanceIntersectsPolygon[1] + populatedToHome[i].distanceOverPopulated[1];
+                if (sumDistance[0] < minIntersects[0] || ((sumDistance[0] - minIntersects[0]) < EPSILON && sumDistance[1] < minIntersects[1])) {
+                    minIntersects[0] = sumDistance[0];
+                    minIntersects[1] = sumDistance[1];
+                    nodeHome = i;
                 }
             }
+            assert(nodeHome != -1);
+            directionsHome = backTrace(populatedToHome, nodeHome);
         } else {
             directionsHome = backTrace(nonPopulatedToHome, nodeHome);
         }
-        assert(nodeHome != -1);
 
-
+        System.out.printf("Path finding took: %f\n", (System.nanoTime() - startTime) / 6e+10);
         return directionsHome;
     }
 

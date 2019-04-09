@@ -29,12 +29,13 @@ public class GPS_Intersection
     private ArrayList<ArrayList<Double>> lonArray;
     private ArrayList<ArrayList<Double>> lightlyPopulatedLatArray;
     private ArrayList<ArrayList<Double>> lightlyPopulatedLonArray;
-    private ArrayList<ArrayList<Double>> bufferLatArray;
-    private ArrayList<ArrayList<Double>> bufferLonArray;
     private String pathToPolygons;
 
-    public ArrayList<ArrayList<Double>> getLatArray() { return latArray; }
-    public ArrayList<ArrayList<Double>> getLonArray() { return lonArray; }
+    ArrayList<ArrayList<Double>> getLatArray() { return latArray; }
+    ArrayList<ArrayList<Double>> getLonArray() { return lonArray; }
+
+    ArrayList<ArrayList<Double>> getLightlyPopulatedLatArray() { return lightlyPopulatedLatArray; }
+    ArrayList<ArrayList<Double>> getLightlyPopulatedLonArray() { return lightlyPopulatedLonArray; }
 
     public GPS_Intersection(String pathToPolygons) {
         this.pathToPolygons = pathToPolygons;
@@ -211,14 +212,12 @@ public class GPS_Intersection
                 lonArray = new ArrayList<>(polygons.size());
 
                 BufferedWriter writer = new BufferedWriter(new FileWriter(stored));
-                writer.write("" + polygons.size());
-                writer.write(" ");
+                writer.write(polygons.size() + " ");
 
                 for (int i = 0; i < polygons.size(); i++) {
                     ArrayList<Double> nextLat = new ArrayList<>();
                     ArrayList<Double> nextLong = new ArrayList<>();
-                    writer.write("" + polygons.get(i).size());
-                    writer.write(" ");
+                    writer.write(polygons.get(i).size() + " ");
                     for (String s : polygons.get(i)) {
                         String[] parsed = s.split(",");
                         nextLat.add(Double.parseDouble(parsed[0]));
@@ -228,6 +227,16 @@ public class GPS_Intersection
                     latArray.add(nextLat);
                     lonArray.add(nextLong);
                 }
+
+                convertToJTS();
+
+                for (int i = 0; i < lightlyPopulatedLatArray.size(); i++) {
+                    writer.write(lightlyPopulatedLatArray.get(i).size() + " ");
+                    for (int j = 0; j < lightlyPopulatedLatArray.get(i).size(); j++) {
+                        writer.write(lightlyPopulatedLatArray.get(i).get(j) + " " + lightlyPopulatedLonArray.get(i).get(j) + " ");
+                    }
+                }
+
                 writer.close();
             } else {
                 System.out.printf("Found storedLatAndLonArray.txt in %s\n", pathToPolygons);
@@ -236,23 +245,31 @@ public class GPS_Intersection
                 int size = reader.nextInt();
                 latArray = new ArrayList<>(size);
                 lonArray = new ArrayList<>(size);
+                lightlyPopulatedLatArray = new ArrayList<>(size);
+                lightlyPopulatedLonArray = new ArrayList<>(size);
 
-                for (int i = 0; i < size; i++) {
-                    ArrayList<Double> nextLat = new ArrayList<>();
-                    ArrayList<Double> nextLong = new ArrayList<>();
-                    int nextSize = reader.nextInt();
-                    for (int j = 0; j < nextSize; j++) {
-                        nextLat.add(reader.nextDouble());
-                        nextLong.add(reader.nextDouble());
-                    }
-                    latArray.add(nextLat);
-                    lonArray.add(nextLong);
-                }
+                fillArrays(latArray, lonArray, reader, size);
+                fillArrays(lightlyPopulatedLatArray, lightlyPopulatedLonArray, reader, size);
+
                 reader.close();
                 System.out.println("storedLatAndLonArray.txt Loaded");
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void fillArrays(ArrayList<ArrayList<Double>> latArray, ArrayList<ArrayList<Double>> lonArray, Scanner reader, int size) {
+        for (int i = 0; i < size; i++) {
+            ArrayList<Double> nextLat = new ArrayList<>();
+            ArrayList<Double> nextLong = new ArrayList<>();
+            int nextSize = reader.nextInt();
+            for (int j = 0; j < nextSize; j++) {
+                nextLat.add(reader.nextDouble());
+                nextLong.add(reader.nextDouble());
+            }
+            latArray.add(nextLat);
+            lonArray.add(nextLong);
         }
     }
 
@@ -293,10 +310,7 @@ public class GPS_Intersection
     public void convertToJTS() {
         lightlyPopulatedLatArray = new ArrayList<>(latArray.size());
         lightlyPopulatedLonArray = new ArrayList<>(lonArray.size());
-        bufferLatArray = new ArrayList<>(latArray.size());
-        bufferLonArray = new ArrayList<>(lonArray.size());
         createSurroundingAreas(latArray, lonArray, lightlyPopulatedLatArray, lightlyPopulatedLonArray);
-        createSurroundingAreas(lightlyPopulatedLatArray, lightlyPopulatedLonArray, bufferLatArray, bufferLonArray);
     }
 
     public void printIfIsContained(double testLat, double testLong) {
@@ -304,15 +318,26 @@ public class GPS_Intersection
         System.out.println(isContained);
     }
 
-    public int indexOfContainedCoord(double testLat, double testLong) {
+    int[] indexOfContainedCoord(double testLat, double testLong) {
         int indexOfContained = -1;
+        int arrayContained = -1;
         for (int i = 0; i < latArray.size(); i++) {
             if (coordinate_is_inside_polygon(testLat, testLong, latArray.get(i), lonArray.get(i))) {
                 indexOfContained = i;
+                arrayContained = 0;
                 break;
             }
         }
-        return indexOfContained;
+        if (arrayContained == -1) {
+            for (int i = 0; i < lightlyPopulatedLatArray.size(); i++) {
+                if (coordinate_is_inside_polygon(testLat, testLong, lightlyPopulatedLatArray.get(i), lightlyPopulatedLonArray.get(i))) {
+                    indexOfContained = i;
+                    arrayContained = 1;
+                    break;
+                }
+            }
+        }
+        return new int[]{indexOfContained, arrayContained};
     }
 
     public GraphPath shortestPath(double[] destination) {
@@ -320,7 +345,7 @@ public class GPS_Intersection
     }
 
     public boolean coordIsContained(double testLat, double testLong) {
-        return indexOfContainedCoord(testLat, testLong) != -1;
+        return indexOfContainedCoord(testLat, testLong)[0] != -1;
     }
 
     public static void main(String[] args) {
