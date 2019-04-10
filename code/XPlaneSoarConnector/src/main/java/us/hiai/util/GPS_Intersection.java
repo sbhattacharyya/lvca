@@ -184,7 +184,6 @@ public class GPS_Intersection
                 polygon_2_lat_long_pairs.add("32.77967, -96.81383");
                 polygon_2_lat_long_pairs.add("32.80567, -96.86766");
 
-
                 polygons.add(polygon_2_lat_long_pairs);
 
 
@@ -318,7 +317,7 @@ public class GPS_Intersection
         System.out.println(isContained);
     }
 
-    int[] indexOfContainedCoord(double testLat, double testLong) {
+    public int[] indexOfContainedCoord(double testLat, double testLong) {
         int indexOfContained = -1;
         int arrayContained = -1;
         for (int i = 0; i < latArray.size(); i++) {

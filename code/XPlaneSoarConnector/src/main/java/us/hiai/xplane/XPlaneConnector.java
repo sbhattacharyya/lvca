@@ -263,8 +263,7 @@ public class XPlaneConnector
             oilPressurePerEngine = values[14];
             oilPressureGreenLo = values[15][0];
             currentTime = values[16][0];
-            boolean isInPopulatedArea = gpsIntersect.coordIsContained(values[2][0], values[3][0]);
-            isPopulated = isInPopulatedArea ? 1 : 0;
+            isPopulated = gpsIntersect.indexOfContainedCoord(values[2][0], values[3][0])[1] + 1;
             autopilotHeading = values[17][0];
             //sim/cockpit/radios/gps2_course_degtm2 = course to next gps coord
             expectedGPSCourse = values[18][0];

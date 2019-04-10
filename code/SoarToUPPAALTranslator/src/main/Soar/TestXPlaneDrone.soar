@@ -29,10 +29,10 @@ sp {applyWait
 }
 
 sp {drone*apply*operator*C2-Lost-Link
-    "Return to base via same routing after 1 minute following loss of link to avoid flight over populous areas"
+    "Return to base via shortest path after 1 minute following loss of link to avoid flight over populous areas"
     :o-support
     (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn)
-    (<fd> ^currentTime <current-time> ^takeOver true ^populated false)
+    (<fd> ^currentTime <current-time> ^takeOver true ^populated lightly)
     -->
     (<s> ^addressedProblem C2 ^maxTimers 1 ^currentTimers 0 ^startNewTimer true)
     (write (crlf) |FOUND C2!|)
@@ -41,11 +41,11 @@ sp {drone*apply*operator*C2-Lost-Link
 sp {drone*apply*returnToBase*populated
    "Execute turn and retrace way points to home since we will be in a populated area in a minute"
    :o-support
-   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea true ^maxTimers <mt> ^currentTimers <cT>)
+   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea fully ^maxTimers <mt> ^currentTimers <cT>)
    (<fd> ^takeOver true)
    -->
    (<s> ^sentCommand reverse
-        ^willBeInPopulatedArea true -
+        ^willBeInPopulatedArea fully -
         ^maxTimers <mT> -
         ^currentTimers <cT> -)
    (write (crlf) |Return To Base because its populated!|)
@@ -63,11 +63,11 @@ sp {drone*apply*returnToBase*outOfTime
 sp {drone*apply*startTimer
    "Start a new one minute timer"
    :o-support
-   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea false)
+   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea {<< lightly null >> <wpa> })
    (<fd> ^takeOver true ^currentTime <current-Time>)
    -->
    (<s> ^timer <t>
-        ^willBeInPopulatedArea false -)
+        ^willBeInPopulatedArea <wPa> -)
    (<t> ^targetTime (+ <current-Time> 60))
    (write (crlf) |Starting one minute timer!|)
 }
@@ -170,4 +170,5 @@ sp {drone*markInPopulatedArea
     (<out> ^command <rc> -)
     (<s> ^willBeInPopulatedArea <wPA>)
     (write (crlf) |Removing timerChecker command!|)
+    (write (crlf) |Calculated WillBeInPopulatedArea as : | <wPA>)
 }

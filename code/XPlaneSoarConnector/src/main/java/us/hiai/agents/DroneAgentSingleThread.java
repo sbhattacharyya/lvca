@@ -14,7 +14,7 @@ import us.hiai.util.*;
 import us.hiai.xplane.XPlaneConnector;
 
 import java.io.*;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -39,15 +39,15 @@ public class DroneAgentSingleThread
 
     public void start()
     {
-        String flightPlanInputFile = "/home/dgries/X-Plane 11/Output/FMS plans/DallasOut156.fms";
+        String flightPlanInputFile = "/home/dgriessl/X-Plane 11/Output/FMS plans/DallasOut156.fms";
         fpp = new FlightPlanParser(flightPlanInputFile);
-        gpsIntersect = new GPS_Intersection("/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
+        gpsIntersect = new GPS_Intersection("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
         flightWeb = gpsIntersect.shortestPath(new double[]{fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()});
 
         sagt = new Agent();
         sagt.setName("DroneSingle");
         sagt.getPrinter().pushWriter(new OutputStreamWriter(System.out));
-        String pathToSoar = "/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
+        String pathToSoar = "/home/dgriessl/IdeaProjects/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
         try {
             SoarCommands.source(sagt.getInterpreter(), pathToSoar);
             System.out.printf("%d Productions Loaded!\n", sagt.getProductions().getProductionCount());
@@ -78,11 +78,11 @@ public class DroneAgentSingleThread
                 add("oilPressureEngine8", defaultDouble).markWme("op8").
                 add("oilPressureGreenLo", defaultDouble).markWme("oGrLo").
                 add("currentTime", defaultDouble).markWme("cT").
-                add("populated", false).markWme("pop").
+                add("populated", "null").markWme("pop").
                 add("autopilotHeading", defaultDouble).markWme("autoHead").
                 add("takeOver", takeOver).markWme("tOver").
                 add("removeCommand", blank).markWme("rC").
-                add("willBeInPopulatedArea", false).markWme("wPA").
+                add("willBeInPopulatedArea", "null").markWme("wPA").
                 add("startTimer", false).markWme("sT");
 
         sagt.getEvents().addListener(OutputEvent.class, soarEvent -> {
@@ -121,13 +121,14 @@ public class DroneAgentSingleThread
                     case "sim/cockpit/autopilot/autopilot_mode":
                         setValueOnSim(dref, (float)setValue.asInteger().getValue());
                         // ADD SEND DREF TO MAKE SURE NAVIGATION IS BY GPS
+                        // There doesn't appear to be one, so make sure this is on.
                         break;
                     case "null" :
                         String setValueString = setValue.asString().getValue();
                         if (setValueString.equals("reverse"))
                             returnToHome();
                         else if (setValueString.equals("calculateWillBeInPopulatedArea")) {
-                            builder.getWme("wPA").update(syms.createString(Boolean.toString(GeometryLogistics.willBeInPopulated(data.lat, data.lon, currentBearing, data.groundSpeed, gpsIntersect))));
+                            builder.getWme("wPA").update(syms.createString(GeometryLogistics.willBeInPopulated(data.lat, data.lon, currentBearing, data.groundSpeed, gpsIntersect)));
                             builder.getWme("sT").update(syms.createString(Boolean.toString(true)));
                         }
                         break;
@@ -210,8 +211,18 @@ public class DroneAgentSingleThread
                 InputWme currentTime = builder.getWme("cT");
                 currentTime.update(syms.createDouble(data.currentTime));
                 InputWme populated = builder.getWme("pop");
-                boolean pop = data.isPopulated == 1;
-                populated.update(syms.createString(Boolean.toString(pop)));
+                String pop;
+                switch (data.isPopulated) {
+                    case 1:
+                        pop = "fully";
+                        break;
+                    case 2:
+                        pop = "lightly";
+                        break;
+                    default:
+                        pop = "null";
+                }
+                populated.update(syms.createString(pop));
                 InputWme autopilotHeading = builder.getWme("autoHead");
                 autopilotHeading.update(syms.createDouble(data.autopilotHeading));
                 InputWme soarControl = builder.getWme("tOver");
@@ -219,7 +230,7 @@ public class DroneAgentSingleThread
 
                 if (currentBearing != -1) {
                     double distance = GeometryLogistics.calculateDistanceToWaypoint(data.lat, data.lon, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude());
-                    if (distance < GeometryLogistics.NM_METERS && fpp.currentWaypoint < fpp.flightPlan.waypoints.size() - 1) {
+                    if (fpp.currentWaypoint < fpp.flightPlan.waypoints.size() - 1 && distance < GeometryLogistics.NM_METERS / 2.0) {
                         fpp.currentWaypoint++;
                         if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
                             circleCurrentWYPT = true;

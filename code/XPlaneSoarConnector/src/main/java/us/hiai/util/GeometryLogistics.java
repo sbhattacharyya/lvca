@@ -90,10 +90,30 @@ public class GeometryLogistics {
         return distanceIntersected;
     }
 
-    public static boolean willBeInPopulated (double currentLat, double currentLong, double currentBearing, double groundSpeed, GPS_Intersection gpsIntersect) {
+    static String checkLineIntersectsPopulated(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+        double currentDistance = maxDistance;
+        double[] destination;
+        String result = "null";
+        while (currentDistance > 0) {
+            destination = calculateDestination(currentLat, currentLong, currentBearing, currentDistance);
+            int isContained = gpsIntersect.indexOfContainedCoord(destination[0], destination[1])[1];
+            switch (isContained) {
+                case 0:
+                    return "fully";
+                case 1:
+                    result = "lightly";
+                    break;
+            }
+            currentDistance -= INCREMENT;
+        }
+        return result;
+    }
+
+    public static String willBeInPopulated (double currentLat, double currentLong, double currentBearing, double groundSpeed, GPS_Intersection gpsIntersect) {
         int time = 60;
         double maxDistance = calculateDistance(groundSpeed, time);
-        return checkLineIntersectsPolygon(currentLat, currentLong, currentBearing, maxDistance, gpsIntersect);
+
+        return checkLineIntersectsPopulated(currentLat, currentLong, currentBearing, maxDistance, gpsIntersect);
     }
 
     public static double calculateDistance(double groundSpeed, double time) {
