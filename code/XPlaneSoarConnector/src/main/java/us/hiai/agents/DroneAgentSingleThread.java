@@ -1,5 +1,6 @@
 package us.hiai.agents;
 
+import org.antlr.v4.misc.Graph;
 import org.jsoar.kernel.*;
 import org.jsoar.kernel.events.OutputEvent;
 import org.jsoar.kernel.io.InputBuilder;
@@ -14,10 +15,10 @@ import us.hiai.util.*;
 import us.hiai.xplane.XPlaneConnector;
 
 import java.io.*;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
@@ -35,7 +36,35 @@ public class DroneAgentSingleThread
     private FlightPlanParser fpp;
     private double currentBearing = -1;
     private FlightData data;
-    private boolean circleCurrentWYPT;
+    private LoiterInput closestLoiterPoint;
+
+    public GraphPath getFlightWeb() {
+        return flightWeb;
+    }
+
+    public FlightData getData() {
+        return data;
+    }
+
+    public LoiterInput getClosestLoiterPoint() {
+        return closestLoiterPoint;
+    }
+
+    public GPS_Intersection getGpsIntersect() {
+        return gpsIntersect;
+    }
+
+    public static class LoiterInput {
+        WaypointNode closestLoiterPoint;
+        boolean keepCalculating;
+        LoiterInput(WaypointNode closestLoiterPoint) {
+            this.closestLoiterPoint = closestLoiterPoint;
+            keepCalculating = true;
+        }
+        public WaypointNode getClosestLoiterPoint() {return closestLoiterPoint;}
+        public boolean isKeepCalculating() { return keepCalculating;}
+
+    }
 
     public void start()
     {
@@ -43,6 +72,8 @@ public class DroneAgentSingleThread
         fpp = new FlightPlanParser(flightPlanInputFile);
         gpsIntersect = new GPS_Intersection("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
         flightWeb = gpsIntersect.shortestPath(new double[]{fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()});
+        closestLoiterPoint = new LoiterInput(new WaypointNode(fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()));
+        data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
 
         sagt = new Agent();
         sagt.setName("DroneSingle");
@@ -91,6 +122,7 @@ public class DroneAgentSingleThread
             Symbol command = null;
             String dref = null;
             Symbol setValue = null;
+            String name = null;
             Iterator<Wme> children = out.getWmes();
             while (children.hasNext()) {
                 Wme temp = children.next();
@@ -107,30 +139,45 @@ public class DroneAgentSingleThread
                     case "setValue":
                         setValue = value;
                         break;
+                    case "name":
+                        name = value.asString().getValue();
+                        break;
                     default:
                         break;
                 }
             }
             System.out.println("DONE OUT EVENT");
-            if (command != null) {
-                InputWme removeCommandWME = builder.getWme("rC");
-                removeCommandWME.update(command);
-            }
-            if (dref != null && setValue != null) {
-                switch(dref) {
-                    case "sim/cockpit/autopilot/autopilot_mode":
+            if (dref != null && setValue != null && name != null) {
+                InputWme removeCommandWME;
+                switch(name) {
+                    case "setAIOn":
                         setValueOnSim(dref, (float)setValue.asInteger().getValue());
+                        currentBearing = 0;
+                        removeCommandWME = builder.getWme("rC");
+                        removeCommandWME.update(command);
                         // ADD SEND DREF TO MAKE SURE NAVIGATION IS BY GPS
                         // There doesn't appear to be one, so make sure this is on.
                         break;
-                    case "null" :
-                        String setValueString = setValue.asString().getValue();
-                        if (setValueString.equals("reverse"))
-                            returnToHome();
-                        else if (setValueString.equals("calculateWillBeInPopulatedArea")) {
-                            builder.getWme("wPA").update(syms.createString(GeometryLogistics.willBeInPopulated(data.lat, data.lon, currentBearing, data.groundSpeed, gpsIntersect)));
-                            builder.getWme("sT").update(syms.createString(Boolean.toString(true)));
-                        }
+                    case "reverseWaypoints" :
+                        closestLoiterPoint.keepCalculating = false;
+                        LinkedList<WaypointNode> loiter = new LinkedList<>();
+                        loiter.add(closestLoiterPoint.closestLoiterPoint);
+                        fpp.reverseWaypoints(loiter);
+                        ExecutorService executor = Executors.newFixedThreadPool(1);
+                        executor.submit(new FindHome(new FindHomeInput(command, new double[]{data.lat, data.lon}, flightWeb, fpp, builder)));
+                        break;
+                    case "timerChecker":
+                        builder.getWme("wPA").update(syms.createString(GeometryLogistics.willBeInPopulated(data.lat, data.lon, currentBearing, data.groundSpeed, gpsIntersect)));
+                        builder.getWme("sT").update(syms.createString(Boolean.toString(true)));
+                        removeCommandWME = builder.getWme("rC");
+                        removeCommandWME.update(command);
+                        break;
+                    case "returnToAltitudeFloor":
+                        long setAltitude = setValue.asInteger().getValue();
+                        setValueOnSim("sim/cockpit/autopilot/altitude", ((Long)setAltitude).floatValue());
+                        // autopilot state = 18 for vs control
+                        // sim/cockpit/autopilot/vertical_velocity = x hundreds of feet per minute
+                        // need to add 1 minute timer then descend.  Need to program how to descend and at what rate
                         break;
                     default:
                         break;
@@ -140,9 +187,11 @@ public class DroneAgentSingleThread
 
         syms = sagt.getSymbols();
         Future ff = Executors.newSingleThreadExecutor().submit(this::flipFlag);
+        Future ff1 = Executors.newSingleThreadExecutor().submit(new TrackClosestLoiter(this));
         pushFlightData();
         sagt.dispose();
         ff.cancel(true);
+        ff1.cancel(true);
     }
 
     private void flipFlag() {
@@ -157,13 +206,35 @@ public class DroneAgentSingleThread
         }
     }
 
-    private void returnToHome() {
-        // change flightPlan back to private in FlightPlanParser
-        LinkedList<WaypointNode> pathHome = flightWeb.findPathHome(data.lat, data.lon);
-        fpp.reverseWaypoints(pathHome);
-        currentBearing = 0;
-        if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
-            circleCurrentWYPT = true;
+    static class FindHomeInput {
+        Symbol command;
+        double[] latAndLon;
+        GraphPath flightWeb;
+        FlightPlanParser fpp;
+        InputBuilder builder;
+        FindHomeInput(Symbol command, double[] latAndLon, GraphPath flightWeb, FlightPlanParser fpp, InputBuilder builder) {
+            this.command = command;
+            this.latAndLon = latAndLon;
+            this.flightWeb = flightWeb;
+            this.fpp = fpp;
+            this.builder = builder;
+        }
+
+    }
+
+    static class FindHome implements Runnable {
+
+        FindHomeInput fhi;
+        FindHome(FindHomeInput fhi) {
+            this.fhi = fhi;
+        }
+        @Override
+        public void run() {
+            LinkedList<WaypointNode> pathHome = fhi.flightWeb.findPathHome(fhi.latAndLon[0], fhi.latAndLon[1]);
+            fhi.fpp.reverseWaypoints(pathHome);
+            InputWme removeCommandWME = fhi.builder.getWme("rC");
+            removeCommandWME.update(fhi.command);
+        }
     }
 
     private void pushFlightData()
@@ -178,18 +249,21 @@ public class DroneAgentSingleThread
 //                System.out.println("\t\tOilGreenLo: " + data.oilPressureGreenLo + "\t\tCurrentTime: " + data.currentTime + "\t\tCurrentSpeed: " + data.airspeed + "\t\tIsPopulated: " + data.isPopulated);
 //                System.out.print("\t\tIsPopulated: " + data.isPopulated + "\t\tautopilotHeading: " + data.autopilotHeading +
 //                        "\t\ttakeOver: " + takeOver + "\t\texpectedGPSCourse: " + data.expectedGPSCourse + "\t\tcurrentWayPoint" + fpp.getCurrentWaypoint().toString());
+
+
                 System.out.print("\t\tpopulated: " + data.isPopulated +"\t\ttakeOver: " + takeOver +"\t\tlat: " + data.lat + "\t\tlon: " + data.lon + "\t\tcurrentBearing: " + currentBearing);
                 System.out.print("\t\tcurrentWayPoint: " + fpp.getCurrentWaypoint().toString());
                 for (WaypointNode waypoint : fpp.flightPlan.waypoints) {
                     System.out.print("\t\t" + waypoint.toString());
                 }
+                System.out.print("\t\tclosestLoiter: " + closestLoiterPoint.closestLoiterPoint.toString());
                 System.out.println(); // 370, 1.9
 
                 InputWme bl = builder.getWme("as");
                 bl.update(syms.createInteger(data.airspeed));
                 InputWme lat = builder.getWme("lat");
                 lat.update(syms.createDouble(data.lat));
-                InputWme lon = builder.getWme("lon");
+                InputWme lon = builder.getWme("lon"); //32.897167 -97.03767
                 lon.update(syms.createDouble(data.lon));
                 InputWme p = builder.getWme("alt");
                 p.update(syms.createInteger(data.altitude));
@@ -232,9 +306,12 @@ public class DroneAgentSingleThread
                     double distance = GeometryLogistics.calculateDistanceToWaypoint(data.lat, data.lon, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude());
                     if (fpp.currentWaypoint < fpp.flightPlan.waypoints.size() - 1 && distance < GeometryLogistics.NM_METERS / 2.0) {
                         fpp.currentWaypoint++;
-                        if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
-                            circleCurrentWYPT = true;
                     }
+                    boolean circleCurrentWYPT;
+                    if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
+                        circleCurrentWYPT = true;
+                    else
+                        circleCurrentWYPT = false;
                     currentBearing = GeometryLogistics.calculateBearing(data.lat, data.lon, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), circleCurrentWYPT, distance);
                     XPlaneConnector.setAutopilotHeading((float)currentBearing);
                 } else {

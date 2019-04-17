@@ -1,7 +1,6 @@
 package us.hiai.util;
 
 import org.jetbrains.annotations.NotNull;
-import sun.misc.DoubleConsts;
 import us.hiai.util.Data_Structures_Book.Entry;
 import us.hiai.util.Data_Structures_Book.HeapAdaptablePriorityQueue;
 
@@ -10,9 +9,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 /**
  * Created by Daniel Griessler Spring 2019
@@ -46,6 +43,12 @@ public class GraphPath {
     private DoubInt[] nonPopulatedToHome;
     private DoubInt[] populatedToHome;
     private HashSet<Integer> hasNonpopulatedPathHome;
+
+    public Node[] getElements() {return elements;}
+    GPS_Intersection getGpsIntersect() {return gpsIntersect;}
+    DoubInt[] getNonPopulatedToHome() {return nonPopulatedToHome;}
+    public DoubInt[] getPopulatedToHome() {return populatedToHome;}
+    public HashSet<Integer> getHasNonpopulatedPathHome() {return hasNonpopulatedPathHome;}
 
     int[] fillElements(int currentIndex, ArrayList<ArrayList<Double>> latArray, ArrayList<ArrayList<Double>> lonArray, int polygon) {
         for (int i = 0; i < latArray.size(); i++) {
@@ -123,14 +126,14 @@ public class GraphPath {
                 writer =  new BufferedWriter(new FileWriter(stored));
                 writer.write(size + " ");
 
-                for (int i = 0; i < nonPopulatedToHome.length; i++) {
-                    writer.write(nonPopulatedToHome[i].backNode + " " + nonPopulatedToHome[i].distance + " ");
+                for (DoubInt doubInt : nonPopulatedToHome) {
+                    writer.write(doubInt.backNode + " " + doubInt.distance + " ");
                 }
 
                 populatedToHome = dijkstra(graphMatrix, size);
 
-                for (int i = 0; i < populatedToHome.length; i++) {
-                    writer.write(populatedToHome[i].backNode + " " + populatedToHome[i].distance + " " + populatedToHome[i].distanceOverPopulated[0] + " " + populatedToHome[i].distanceOverPopulated[1] + " ");
+                for (DoubInt doubInt : populatedToHome) {
+                    writer.write(doubInt.backNode + " " + doubInt.distance + " " + doubInt.distanceOverPopulated[0] + " " + doubInt.distanceOverPopulated[1] + " ");
                 }
                 writer.close();
 
@@ -385,48 +388,113 @@ public class GraphPath {
         return path;
     }
 
-    private double[] getDistanceAndBearing(double lat1, double lon1, double lat2, double lon2) {
+    double[] getDistanceAndBearing(double lat1, double lon1, double lat2, double lon2) {
         double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(lat1, lon1, lat2, lon2);
         double currentBearing = GeometryLogistics.calculateBearing(lat1, lon1, lat2, lon2, false, null);
         return new double[] {distanceToNode, currentBearing};
     }
+
+//    public LinkedList<WaypointNode> findPathHome(double planeLat, double planeLon) {
+//        double startTime = System.nanoTime();
+//        double minDistanceHome = Double.MAX_VALUE;
+//        int nodeHome = -1;
+//        LinkedList<WaypointNode> directionsHome;
+//        for (Integer node : hasNonpopulatedPathHome) {
+//            double[] distanceAndBearing = getDistanceAndBearing(planeLat, planeLon, elements[node].getLat(), elements[node].getLon());
+//            if (!GeometryLogistics.checkLineIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect)) {
+//                double sumDist = distanceAndBearing[0] + nonPopulatedToHome[node].distance;
+//                if (sumDist < minDistanceHome) {
+//                    minDistanceHome = sumDist;
+//                    nodeHome = node;
+//                }
+//            }
+//        }
+//        if (nodeHome == -1) {
+//            double[] minIntersects = new double[]{Double.MAX_VALUE, Double.MAX_VALUE};
+//            double[] sumDistance = new double[2];
+//            for (int i = 0; i < populatedToHome.length; i++) {
+//                double[] distanceAndBearing = getDistanceAndBearing(planeLat, planeLon, elements[i].getLat(), elements[i].getLon());
+//                double[] distanceIntersectsPolygon = GeometryLogistics.countDistanceIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect);
+//                sumDistance[0] = distanceIntersectsPolygon[0] + populatedToHome[i].distanceOverPopulated[0];
+//                sumDistance[1] = distanceIntersectsPolygon[1] + populatedToHome[i].distanceOverPopulated[1];
+//                if (sumDistance[0] < minIntersects[0] || ((sumDistance[0] - minIntersects[0]) < EPSILON && sumDistance[1] < minIntersects[1])) {
+//                    minIntersects[0] = sumDistance[0];
+//                    minIntersects[1] = sumDistance[1];
+//                    nodeHome = i;
+//                }
+//            }
+//            assert(nodeHome != -1);
+//            directionsHome = backTrace(populatedToHome, nodeHome);
+//        } else {
+//            directionsHome = backTrace(nonPopulatedToHome, nodeHome);
+//        }
+//
+//        System.out.printf("Path finding took: %f\n", (System.nanoTime() - startTime) / 6e+10);
+//        return directionsHome;
+//    }
 
     public LinkedList<WaypointNode> findPathHome(double planeLat, double planeLon) {
         double startTime = System.nanoTime();
         double minDistanceHome = Double.MAX_VALUE;
         int nodeHome = -1;
         LinkedList<WaypointNode> directionsHome;
-        for (Integer node : hasNonpopulatedPathHome) {
-            double[] distanceAndBearing = getDistanceAndBearing(planeLat, planeLon, elements[node].getLat(), elements[node].getLon());
-            if (!GeometryLogistics.checkLineIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect)) {
-                double sumDist = distanceAndBearing[0] + nonPopulatedToHome[node].distance;
-                if (sumDist < minDistanceHome) {
-                    minDistanceHome = sumDist;
-                    nodeHome = node;
+
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        Set<Future<DoubInt>> set = new HashSet<>();
+//        System.out.println("Entering find path home calculation");
+
+        if (hasNonpopulatedPathHome.size() != 0) {
+            for (Integer node : hasNonpopulatedPathHome) {
+                Callable<DoubInt> worker = new PathFinderNonPopulated(new PackedPathFinder(planeLat, planeLon, this, node));
+                Future<DoubInt> future = executor.submit(worker);
+                set.add(future);
+//                System.out.println("Nonpopulated Added thread " + node);
+            }
+//            int out = 0;
+            for (Future<DoubInt> nextOut : set) {
+                DoubInt val = null;
+                try {
+                    val = nextOut.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
                 }
+                if (val != null && val.distance < minDistanceHome) {
+                    minDistanceHome = val.distance;
+                    nodeHome = val.backNode;
+                }
+//                System.out.println("NonpopulatedProcessed thread " + out++);
             }
         }
         if (nodeHome == -1) {
             double[] minIntersects = new double[]{Double.MAX_VALUE, Double.MAX_VALUE};
-            double[] sumDistance = new double[2];
             for (int i = 0; i < populatedToHome.length; i++) {
-                double[] distanceAndBearing = getDistanceAndBearing(planeLat, planeLon, elements[i].getLat(), elements[i].getLon());
-                double[] distanceIntersectsPolygon = GeometryLogistics.countDistanceIntersectsPolygon(planeLat, planeLon, distanceAndBearing[1], distanceAndBearing[0], gpsIntersect);
-                sumDistance[0] = distanceIntersectsPolygon[0] + populatedToHome[i].distanceOverPopulated[0];
-                sumDistance[1] = distanceIntersectsPolygon[1] + populatedToHome[i].distanceOverPopulated[1];
-                if (sumDistance[0] < minIntersects[0] || ((sumDistance[0] - minIntersects[0]) < EPSILON && sumDistance[1] < minIntersects[1])) {
-                    minIntersects[0] = sumDistance[0];
-                    minIntersects[1] = sumDistance[1];
-                    nodeHome = i;
-                }
+                Callable<DoubInt> worker = new PathFinderPopulated(new PackedPathFinder(planeLat, planeLon, this, i));
+                Future<DoubInt> future = executor.submit(worker);
+                set.add(future);
+//                System.out.println("Added thread " + i);
             }
-            assert(nodeHome != -1);
+//            int out = 1;
+            for (Future<DoubInt> nextOut : set) {
+                DoubInt val = null;
+                try {
+                    val = nextOut.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+                if (val != null && (val.distanceOverPopulated[0] < minIntersects[0] || ((val.distanceOverPopulated[0] - minIntersects[0]) < EPSILON && val.distanceOverPopulated[1] < minIntersects[1]))) {
+                    minIntersects[0] = val.distanceOverPopulated[0];
+                    minIntersects[1] = val.distanceOverPopulated[1];
+                    nodeHome = val.backNode;
+                }
+//                System.out.println("Processed thread " + out++);
+            }
             directionsHome = backTrace(populatedToHome, nodeHome);
         } else {
             directionsHome = backTrace(nonPopulatedToHome, nodeHome);
         }
 
         System.out.printf("Path finding took: %f\n", (System.nanoTime() - startTime) / 6e+10);
+        System.out.flush();
         return directionsHome;
     }
 

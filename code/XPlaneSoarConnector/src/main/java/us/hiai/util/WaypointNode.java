@@ -8,7 +8,7 @@ public class WaypointNode {
     private float longitude;
 
     WaypointNode() {}
-    WaypointNode(double latitude, double longitude) {
+    public WaypointNode(double latitude, double longitude) {
         this.latitude = (float)latitude;
         this.longitude = (float)longitude;
     }

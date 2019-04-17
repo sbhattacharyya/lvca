@@ -41,7 +41,7 @@ public class GeometryLogistics {
         return EARTH_RADIUS * c;
     }
 
-    public static boolean checkLineIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+    static boolean checkLineIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
         double currentDistance = maxDistance;
         double[] destination;
         while (currentDistance > 0) {
@@ -57,7 +57,7 @@ public class GeometryLogistics {
         return false;
     }
 
-    public static double[] countDistanceIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+    static double[] countDistanceIntersectsPolygon(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
         double currentDistance = maxDistance;
         double[] destination;
         double[] distanceIntersected = new double[2];

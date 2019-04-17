@@ -28,12 +28,11 @@ public class FlightPlanParser {
     }
 
     public void updateWaypoint(Double heading) {
-        double EPSILON = 0.01;
-        if (currentHeading == null) {
-            currentHeading = heading;
-        } else if (Math.abs(currentHeading - heading) > EPSILON && currentWaypoint + 1 < flightPlan.waypoints.size()) {
+        double EPSILON = 1;
+        if (currentHeading != null && Math.abs(currentHeading - heading) > EPSILON && currentWaypoint + 1 < flightPlan.waypoints.size()) {
             currentWaypoint++;
         }
+        currentHeading = heading;
     }
 
     public WaypointNode getCurrentWaypoint() {return flightPlan.waypoints.get(currentWaypoint);}

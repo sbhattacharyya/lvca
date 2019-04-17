@@ -32,10 +32,30 @@ sp {drone*apply*operator*C2-Lost-Link
     "Return to base via shortest path after 1 minute following loss of link to avoid flight over populous areas"
     :o-support
     (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn)
-    (<fd> ^currentTime <current-time> ^takeOver true ^populated lightly)
+    (<fd> ^takeOver true ^populated fully)
     -->
     (<s> ^addressedProblem C2 ^maxTimers 1 ^currentTimers 0 ^startNewTimer true)
     (write (crlf) |FOUND C2!|)
+}
+
+sp {drone*apply*operator*C3-Lost-Link
+    "Return to base via shortest path after 8 minutes following lost of link to avoid flight over populous areas"
+    :o-support
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn)
+    (<fd> ^takeOver true ^populated lightly)
+    -->
+    (<s> ^addressedProblem C3 ^maxTimers 8 ^currentTimers 0 ^startNewTimer true)
+    (write (crlf) |FOUND C3!|)
+}
+
+sp {drone*apply*operator*C4-Lost-Link
+    "Maintain Pre-Programmed Course, Return to mission altitude/altitude floor"
+    :o-support
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn)
+    (<fd> ^takeOver true ^populated null)
+    -->
+    (<s> ^addressedProblem C4 ^sentCommand returnToAltitudeFloor)
+    (write (crlf) |FOUND C4!|)
 }
 
 sp {drone*apply*returnToBase*populated
@@ -44,11 +64,11 @@ sp {drone*apply*returnToBase*populated
    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea fully ^maxTimers <mt> ^currentTimers <cT>)
    (<fd> ^takeOver true)
    -->
-   (<s> ^sentCommand reverse
-        ^willBeInPopulatedArea fully -
-        ^maxTimers <mT> -
-        ^currentTimers <cT> -)
-   (write (crlf) |Return To Base because its populated!|)
+   (<s> ^sentCommand reverse)
+   (<s> ^willBeInPopulatedArea fully -)
+   (<s> ^maxTimers <mT> -)
+   (<s> ^currentTimers <cT> -)
+   (write (crlf) |Return To Base because projected to be in populated!|)
 }
 
 sp {drone*apply*returnToBase*outOfTime
@@ -63,11 +83,11 @@ sp {drone*apply*returnToBase*outOfTime
 sp {drone*apply*startTimer
    "Start a new one minute timer"
    :o-support
-   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea {<< lightly null >> <wpa> })
+   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^willBeInPopulatedArea {<< lightly null >> <wPA> })
    (<fd> ^takeOver true ^currentTime <current-Time>)
    -->
-   (<s> ^timer <t>
-        ^willBeInPopulatedArea <wPa> -)
+   (<s> ^timer <t>)
+   (<s> ^willBeInPopulatedArea <wPA> -)
    (<t> ^targetTime (+ <current-Time> 60))
    (write (crlf) |Starting one minute timer!|)
 }
@@ -109,8 +129,8 @@ sp {drone*apply*updateOut*setAIOn
     (<fd> ^takeOver true)
     -->
     (<out> ^command <com>)
-    (<com> ^dref sim/cockpit/autopilot/autopilot_mode
-           ^setValue 2
+    (<com> ^dref sim/cockpit/autopilot/autopilot_state
+           ^setValue 16386
            ^name setAIOn)
     (<s> ^sentCommand aiOn -
          ^commands aiIsOn)
@@ -143,6 +163,20 @@ sp {drone*apply*updateOut*queryForTimer
            ^name timerChecker)
     (<s> ^sentCommand queryPop -)
     (write (crlf) | Adding Check Timer Command!|)
+}
+
+sp {drone*apply*updateOut*goToAltitudeFloor
+    "Creates command on output to tell X Plane to descend or rise to the given altitude"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sendCommand returnToAltitudeFloor)
+    (<fd> ^takeOver true)
+    -->
+    (<out> ^command <com>)
+    (<com> ^dref null
+           ^setValue 500
+           ^name returnToAltitudeFloor)
+    (<s> ^sentCommand returnToAltitudeFloor -)
+    (write (crlf) | Adding Return to Altitude Floor Command!|)
 }
 
 sp {drone*removeOutputCommand
