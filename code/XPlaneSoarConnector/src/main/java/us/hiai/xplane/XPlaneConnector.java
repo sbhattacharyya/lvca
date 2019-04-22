@@ -162,7 +162,7 @@ public class XPlaneConnector
         return new float[1][1];
     }
 
-    private float getValueFromSim(String str)
+    public static float getValueFromSim(String str)
     {
         try
         {
