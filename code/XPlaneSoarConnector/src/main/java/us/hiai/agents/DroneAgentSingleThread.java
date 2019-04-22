@@ -37,6 +37,7 @@ public class DroneAgentSingleThread
     private double currentBearing = -1;
     private FlightData data;
     private LoiterInput closestLoiterPoint;
+    private double startAlt;
 
     public GraphPath getFlightWeb() {
         return flightWeb;
@@ -74,6 +75,7 @@ public class DroneAgentSingleThread
         flightWeb = gpsIntersect.shortestPath(new double[]{fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()});
         closestLoiterPoint = new LoiterInput(new WaypointNode(fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()));
         data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
+        startAlt = XPlaneConnector.getValueFromSim("sim/cockpit2/gauges/indicators/altitude_ft_pilot");
 
         sagt = new Agent();
         sagt.setName("DroneSingle");
@@ -177,7 +179,7 @@ public class DroneAgentSingleThread
                         setValueOnSim("sim/cockpit/autopilot/altitude", ((Long)setAltitude).floatValue());
                         // autopilot state = 18 for vs control
                         // sim/cockpit/autopilot/vertical_velocity = x hundreds of feet per minute
-                        // need to add 1 minute timer then descend.  Need to program how to descend and at what rate
+                        returnToAltitudeFloor(command, setAltitude);
                         break;
                     default:
                         break;
@@ -192,6 +194,53 @@ public class DroneAgentSingleThread
         sagt.dispose();
         ff.cancel(true);
         ff1.cancel(true);
+    }
+
+    private void returnToAltitudeFloor(Symbol command, long setAltitude) {
+        setValueOnSim("sim/cockpit/autopilot/autopilot_state", 18);
+        double currentAlt = data.altitude;
+        double totalTimeToDescend = (500-currentAlt) / -2500.0;
+        double coefA = 2500.0 / totalTimeToDescend;
+        double zeroTime = System.nanoTime() / 6e+10;
+        Executors.newSingleThreadExecutor().submit(new VSUpdator(coefA, zeroTime, this, command, setAltitude));
+    }
+
+    static class VSUpdator implements Runnable {
+        double coefA;
+        double zeroTime;
+        DroneAgentSingleThread dst;
+        Symbol command;
+        long setAltitude;
+        VSUpdator(double coefA, double zeroTime, DroneAgentSingleThread dst, Symbol command, long setAltitude) {
+            this.coefA = coefA;
+            this.zeroTime = zeroTime;
+            this.dst = dst;
+            this.command = command;
+            this.setAltitude = setAltitude;
+        }
+        @Override
+        public void run() {
+            while (Math.abs(dst.data.altitude - setAltitude + dst.startAlt) > 1) {
+//                double currentTime = System.nanoTime() / 6e+10;
+//                float val = (float)(Math.round((2*coefA*(currentTime - zeroTime) - 5000) / 100) * 100);
+//                if (val > 0) {
+//                    break;
+//                }
+//                System.out.println("zeroTime: " + zeroTime + " currentTime: " + currentTime + "with coefA: " + coefA +" calculated run val: " + val);
+                float val = -500;
+                setValueOnSim("sim/cockpit/autopilot/vertical_velocity", val);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("Final alt: " + dst.data.altitude);
+            setValueOnSim("sim/cockpit/autopilot/vertical_velocity", 0);
+            setValueOnSim("sim/cockpit/autopilot/autopilot_state", 16386);
+            InputWme removeCommandWME = dst.builder.getWme("rC");
+            removeCommandWME.update(command);
+        }
     }
 
     private void flipFlag() {
