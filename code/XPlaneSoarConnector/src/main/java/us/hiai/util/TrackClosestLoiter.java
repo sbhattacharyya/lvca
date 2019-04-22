@@ -49,14 +49,14 @@ public class TrackClosestLoiter implements Runnable {
         this.dast = dast;
         lastCalcLatAndLon = new double[]{dast.getData().lat, dast.getData().lon};
         for(int i = 0; i < dast.getFlightWeb().getElements().length; i++) {
-            WaypointNode newInput = new WaypointNode(dast.getFlightWeb().getElements()[i].getLat(), dast.getFlightWeb().getElements()[i].getLon());
+            WaypointNode newInput = dast.getFlightWeb().getElements()[i].getPoint();
             Entry<Distances, WaypointNode> newInsert = loiterPoints.insert(new Distances(dast.getFlightWeb().getPopulatedToHome()[i].distance, dast.getFlightWeb().getPopulatedToHome()[i].distanceOverPopulated), newInput);
             insertedPoints.add(newInsert);
         }
         updateClosestLoiter();
     }
 
-    void updateClosestLoiter() {
+    private void updateClosestLoiter() {
         dast.getClosestLoiterPoint().getClosestLoiterPoint().setLatitude(loiterPoints.min().getValue().getLatitude());
         dast.getClosestLoiterPoint().getClosestLoiterPoint().setLongitude(loiterPoints.min().getValue().getLongitude());
     }
@@ -73,20 +73,20 @@ public class TrackClosestLoiter implements Runnable {
     static class DistancesCalculator implements Callable<DistancesCalculatorOutput> {
 
         double[] currentLatAndLon;
-        double[] inputLatAndLon;
+        WaypointNode inputPoint;
         GPS_Intersection myIntersect;
         int index;
-        DistancesCalculator(int index, double[] currentLatAndLon, double[] inputLatAndLon, GPS_Intersection myIntersect) {
+        DistancesCalculator(int index, double[] currentLatAndLon, WaypointNode inputPoint, GPS_Intersection myIntersect) {
             this.index = index;
             this.currentLatAndLon = currentLatAndLon;
-            this.inputLatAndLon = inputLatAndLon;
+            this.inputPoint = inputPoint;
             this.myIntersect = myIntersect;
         }
 
         @Override
         public DistancesCalculatorOutput call() {
-            double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(currentLatAndLon[0], currentLatAndLon[1], inputLatAndLon[0], inputLatAndLon[1]);
-            double currentBearing = GeometryLogistics.calculateBearing(currentLatAndLon[0], currentLatAndLon[1], inputLatAndLon[0], inputLatAndLon[1], false, null);
+            double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(currentLatAndLon[0], currentLatAndLon[1], inputPoint.getLatitude(), inputPoint.getLongitude());
+            double currentBearing = GeometryLogistics.calculateBearing(currentLatAndLon[0], currentLatAndLon[1], inputPoint.getLatitude(), inputPoint.getLongitude(), false, null);
             double[] distanceOverPolygons = GeometryLogistics.countDistanceIntersectsPolygon(currentLatAndLon[0], currentLatAndLon[1], currentBearing, distanceToNode, myIntersect);
             return new DistancesCalculatorOutput(index, new Distances(distanceToNode, distanceOverPolygons));
         }
@@ -102,7 +102,7 @@ public class TrackClosestLoiter implements Runnable {
                 ExecutorService executor = Executors.newFixedThreadPool(4);
                 Set<Future<DistancesCalculatorOutput>> set = new HashSet<>();
                 for(int i = 0; i < insertedPoints.size(); i++) {
-                    Callable<DistancesCalculatorOutput> worker = new DistancesCalculator(i, currentLatAndLon, new double[]{insertedPoints.get(i).getValue().getLatitude(), insertedPoints.get(i).getValue().getLongitude()}, dast.getGpsIntersect());
+                    Callable<DistancesCalculatorOutput> worker = new DistancesCalculator(i, currentLatAndLon, insertedPoints.get(i).getValue(), dast.getGpsIntersect());
                     Future<DistancesCalculatorOutput> future = executor.submit(worker);
                     set.add(future);
                 }

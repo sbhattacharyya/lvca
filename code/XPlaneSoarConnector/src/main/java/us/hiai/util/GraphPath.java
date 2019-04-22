@@ -17,21 +17,17 @@ import java.util.concurrent.*;
  */
 public class GraphPath {
     static class Node {
-        private double lat;
-        private double lon;
+        private WaypointNode point;
         int polygonIndex;
-        Node(double lat, double lon, int polygonIndex) {
-            this.lat = lat;
-            this.lon = lon;
+        Node(WaypointNode point, int polygonIndex) {
+            this.point = point;
             this.polygonIndex = polygonIndex;
         }
         public double getLat() {
-            return lat;
+            return point.getLatitude();
         }
-
-        public double getLon() {
-            return lon;
-        }
+        public double getLon() { return point.getLongitude(); }
+        public WaypointNode getPoint() { return point;}
 
         int getPolygonIndex() {
             return polygonIndex;
@@ -50,11 +46,11 @@ public class GraphPath {
     public DoubInt[] getPopulatedToHome() {return populatedToHome;}
     public HashSet<Integer> getHasNonpopulatedPathHome() {return hasNonpopulatedPathHome;}
 
-    int[] fillElements(int currentIndex, ArrayList<ArrayList<Double>> latArray, ArrayList<ArrayList<Double>> lonArray, int polygon) {
-        for (int i = 0; i < latArray.size(); i++) {
-            int currentSize = lonArray.get(i).size();
+    int[] fillElements(int currentIndex, ArrayList<ArrayList<WaypointNode>> pointArray, int polygon) {
+        for (int i = 0; i < pointArray.size(); i++) {
+            int currentSize = pointArray.get(i).size();
             for (int j = 0; j < currentSize; j++) {
-                elements[currentIndex++] = new Node(latArray.get(i).get(j), lonArray.get(i).get(j), polygon);
+                elements[currentIndex++] = new Node(pointArray.get(i).get(j), polygon);
             }
 //            polygonEnd[polygonEndIndex++] = currentIndex - 1;
             polygon++;
@@ -62,7 +58,7 @@ public class GraphPath {
         return new int[]{currentIndex, /*polygonEndIndex,*/ polygon};
     }
 
-    GraphPath(double[] home, GPS_Intersection gpsIntersect, String pathToPolygons) {
+    GraphPath(WaypointNode home, GPS_Intersection gpsIntersect, String pathToPolygons) {
         this.gpsIntersect = gpsIntersect;
         File stored = new File(pathToPolygons + "/storedGraphPath.txt");
         try {
@@ -74,10 +70,10 @@ public class GraphPath {
                 System.out.printf("Can't find storedGraphPath.txt in %s\n", pathToPolygons);
                 System.out.printf("Creating new file... %s/storedGraphPath.txt\n", pathToPolygons);
                 size = 1;
-                for (ArrayList<Double> nextList : gpsIntersect.getLatArray()) {
+                for (ArrayList<WaypointNode> nextList : gpsIntersect.getPopPoints()) {
                     size += nextList.size();
                 }
-                for (ArrayList<Double> nextList : gpsIntersect.getLightlyPopulatedLatArray()) {
+                for (ArrayList<WaypointNode> nextList : gpsIntersect.getLightlyPopPoints()) {
                     size += nextList.size();
                 }
             } else {
@@ -87,9 +83,9 @@ public class GraphPath {
                 size = reader.nextInt();
             }
             elements = new Node[size];
-            elements[0] = new Node(home[0], home[1], -1);
-            int[] currentIndexAndPolygonIndex = fillElements(1, gpsIntersect.getLatArray(), gpsIntersect.getLonArray(), 0);
-            fillElements(currentIndexAndPolygonIndex[0], gpsIntersect.getLightlyPopulatedLatArray(), gpsIntersect.getLightlyPopulatedLonArray(), currentIndexAndPolygonIndex[1]);
+            elements[0] = new Node(home, -1);
+            int[] currentIndexAndPolygonIndex = fillElements(1, gpsIntersect.getPopPoints(), 0);
+            fillElements(currentIndexAndPolygonIndex[0], gpsIntersect.getLightlyPopPoints(), currentIndexAndPolygonIndex[1]);
 
 
             if (createdNewFile) {
@@ -377,12 +373,12 @@ public class GraphPath {
     private LinkedList<WaypointNode> backTrace(DoubInt[] directionsHome, int startNode) {
         LinkedList<WaypointNode> path = new LinkedList<>();
         DoubInt current = directionsHome[startNode];
-        path.add(new WaypointNode(elements[startNode].lat, elements[startNode].lon));
+        path.add(elements[startNode].getPoint());
         while (current.backNode != -2) {
             if (current.backNode == -1) {
                 return null;
             }
-            path.add(new WaypointNode(elements[current.backNode].lat, elements[current.backNode].lon));
+            path.add(elements[current.backNode].getPoint());
             current = directionsHome[current.backNode];
         }
         return path;

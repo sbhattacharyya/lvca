@@ -25,17 +25,13 @@ public class GPS_Intersection
 {
     public static double PI = 3.14159265;
     private static double TWO_PI = 2*PI;
-    private ArrayList<ArrayList<Double>> latArray;
-    private ArrayList<ArrayList<Double>> lonArray;
-    private ArrayList<ArrayList<Double>> lightlyPopulatedLatArray;
-    private ArrayList<ArrayList<Double>> lightlyPopulatedLonArray;
+    private ArrayList<ArrayList<WaypointNode>> popPoints;
+    private ArrayList<ArrayList<WaypointNode>> lightlyPopPoints;
     private String pathToPolygons;
 
-    ArrayList<ArrayList<Double>> getLatArray() { return latArray; }
-    ArrayList<ArrayList<Double>> getLonArray() { return lonArray; }
+    ArrayList<ArrayList<WaypointNode>> getPopPoints() {return popPoints;}
 
-    ArrayList<ArrayList<Double>> getLightlyPopulatedLatArray() { return lightlyPopulatedLatArray; }
-    ArrayList<ArrayList<Double>> getLightlyPopulatedLonArray() { return lightlyPopulatedLonArray; }
+    ArrayList<ArrayList<WaypointNode>> getLightlyPopPoints() {return lightlyPopPoints;}
 
     public GPS_Intersection(String pathToPolygons) {
         this.pathToPolygons = pathToPolygons;
@@ -207,32 +203,28 @@ public class GPS_Intersection
 
                 polygons.add(polygon_4_lat_long_pairs);
 
-                latArray = new ArrayList<>(polygons.size());
-                lonArray = new ArrayList<>(polygons.size());
+                popPoints = new ArrayList<>(polygons.size());
 
                 BufferedWriter writer = new BufferedWriter(new FileWriter(stored));
                 writer.write(polygons.size() + " ");
 
                 for (int i = 0; i < polygons.size(); i++) {
-                    ArrayList<Double> nextLat = new ArrayList<>();
-                    ArrayList<Double> nextLong = new ArrayList<>();
+                    ArrayList<WaypointNode> nextSetOfPoints = new ArrayList<>();
                     writer.write(polygons.get(i).size() + " ");
                     for (String s : polygons.get(i)) {
                         String[] parsed = s.split(",");
-                        nextLat.add(Double.parseDouble(parsed[0]));
-                        nextLong.add(Double.parseDouble(parsed[1]));
+                        nextSetOfPoints.add(new WaypointNode(Double.parseDouble(parsed[0]), Double.parseDouble(parsed[1])));
                         writer.write(parsed[0] + parsed[1] + " ");
                     }
-                    latArray.add(nextLat);
-                    lonArray.add(nextLong);
+                    popPoints.add(nextSetOfPoints);
                 }
 
                 convertToJTS();
 
-                for (int i = 0; i < lightlyPopulatedLatArray.size(); i++) {
-                    writer.write(lightlyPopulatedLatArray.get(i).size() + " ");
-                    for (int j = 0; j < lightlyPopulatedLatArray.get(i).size(); j++) {
-                        writer.write(lightlyPopulatedLatArray.get(i).get(j) + " " + lightlyPopulatedLonArray.get(i).get(j) + " ");
+                for (int i = 0; i < lightlyPopPoints.size(); i++) {
+                    writer.write(lightlyPopPoints.get(i).size() + " ");
+                    for (int j = 0; j < lightlyPopPoints.get(i).size(); j++) {
+                        writer.write(lightlyPopPoints.get(i).get(j).getLatitude() + " " + lightlyPopPoints.get(i).get(j).getLatitude() + " ");
                     }
                 }
 
@@ -242,13 +234,11 @@ public class GPS_Intersection
                 System.out.println("Loading storedLatAndLonArray.txt...");
                 Scanner reader = new Scanner(stored);
                 int size = reader.nextInt();
-                latArray = new ArrayList<>(size);
-                lonArray = new ArrayList<>(size);
-                lightlyPopulatedLatArray = new ArrayList<>(size);
-                lightlyPopulatedLonArray = new ArrayList<>(size);
+                popPoints = new ArrayList<>(size);
+                lightlyPopPoints = new ArrayList<>(size);
 
-                fillArrays(latArray, lonArray, reader, size);
-                fillArrays(lightlyPopulatedLatArray, lightlyPopulatedLonArray, reader, size);
+                fillArrays(popPoints, reader, size);
+                fillArrays(lightlyPopPoints, reader, size);
 
                 reader.close();
                 System.out.println("storedLatAndLonArray.txt Loaded");
@@ -258,31 +248,27 @@ public class GPS_Intersection
         }
     }
 
-    private void fillArrays(ArrayList<ArrayList<Double>> latArray, ArrayList<ArrayList<Double>> lonArray, Scanner reader, int size) {
+    private void fillArrays(ArrayList<ArrayList<WaypointNode>> pointArray, Scanner reader, int size) {
         for (int i = 0; i < size; i++) {
-            ArrayList<Double> nextLat = new ArrayList<>();
-            ArrayList<Double> nextLong = new ArrayList<>();
+            ArrayList<WaypointNode> nextPointArray = new ArrayList<>();
             int nextSize = reader.nextInt();
             for (int j = 0; j < nextSize; j++) {
-                nextLat.add(reader.nextDouble());
-                nextLong.add(reader.nextDouble());
+                nextPointArray.add(new WaypointNode(reader.nextDouble(), reader.nextDouble()));
             }
-            latArray.add(nextLat);
-            lonArray.add(nextLong);
+            pointArray.add(nextPointArray);
         }
     }
 
-    private Polygon[] expandPolygon(ArrayList<ArrayList<Double>> baseLatArray, ArrayList<ArrayList<Double>> baseLonArray) {
+    private Polygon[] expandPolygon(ArrayList<ArrayList<WaypointNode>> basePoints) {
         GeometryFactory gf = new GeometryFactory();
-        Polygon[] myPolys = new Polygon[baseLatArray.size()];
-        for(int i = 0; i < baseLatArray.size(); i++) {
-            ArrayList<Double> nextLat = baseLatArray.get(i);
-            ArrayList<Double> nextLon = baseLonArray.get(i);
-            Coordinate[] coords = new Coordinate[nextLat.size() + 1];
-            for(int j = 0; j < nextLat.size(); j++) {
-                coords[j] = new Coordinate(nextLat.get(j), nextLon.get(j));
+        Polygon[] myPolys = new Polygon[basePoints.size()];
+        for(int i = 0; i < basePoints.size(); i++) {
+            ArrayList<WaypointNode> nextSetOfPoints = basePoints.get(i);
+            Coordinate[] coords = new Coordinate[nextSetOfPoints.size() + 1];
+            for(int j = 0; j < nextSetOfPoints.size(); j++) {
+                coords[j] = new Coordinate(nextSetOfPoints.get(j).getLatitude(), nextSetOfPoints.get(j).getLongitude());
             }
-            coords[coords.length - 1] = new Coordinate(nextLat.get(0), nextLon.get(0));
+            coords[coords.length - 1] = new Coordinate(nextSetOfPoints.get(0).getLatitude(), nextSetOfPoints.get(0).getLongitude());
             myPolys[i] = new Polygon(gf.createLinearRing(coords), null, gf);
         }
         Polygon[] modMyPolys = new Polygon[myPolys.length];
@@ -292,24 +278,20 @@ public class GPS_Intersection
         return modMyPolys;
     }
 
-    private void createSurroundingAreas(ArrayList<ArrayList<Double>> baseLatArray, ArrayList<ArrayList<Double>> baseLonArray, ArrayList<ArrayList<Double>> newLatArray, ArrayList<ArrayList<Double>> newLonArray) {
-        Polygon[] modMyPolys = expandPolygon(baseLatArray, baseLonArray);
+    private void createSurroundingAreas(ArrayList<ArrayList<WaypointNode>> basePoints, ArrayList<ArrayList<WaypointNode>> newPointArray) {
+        Polygon[] modMyPolys = expandPolygon(basePoints);
         for (Polygon nextPoly : modMyPolys) {
-            ArrayList<Double> currentLatArray = new ArrayList<>(nextPoly.getCoordinates().length);
-            ArrayList<Double> currentLonArray = new ArrayList<>(nextPoly.getCoordinates().length);
+            ArrayList<WaypointNode> currentPointArray = new ArrayList<>(nextPoly.getCoordinates().length);
             for (Coordinate nextCoord : nextPoly.getCoordinates()) {
-                currentLatArray.add(nextCoord.x);
-                currentLonArray.add(nextCoord.y);
+                currentPointArray.add(new WaypointNode(nextCoord.x, nextCoord.y));
             }
-            newLatArray.add(currentLatArray);
-            newLonArray.add(currentLonArray);
+            newPointArray.add(currentPointArray);
         }
     }
 
     public void convertToJTS() {
-        lightlyPopulatedLatArray = new ArrayList<>(latArray.size());
-        lightlyPopulatedLonArray = new ArrayList<>(lonArray.size());
-        createSurroundingAreas(latArray, lonArray, lightlyPopulatedLatArray, lightlyPopulatedLonArray);
+        lightlyPopPoints = new ArrayList<>(popPoints.size());
+        createSurroundingAreas(popPoints, lightlyPopPoints);
     }
 
     public void printIfIsContained(double testLat, double testLong) {
@@ -320,16 +302,16 @@ public class GPS_Intersection
     public int[] indexOfContainedCoord(double testLat, double testLong) {
         int indexOfContained = -1;
         int arrayContained = -1;
-        for (int i = 0; i < latArray.size(); i++) {
-            if (coordinate_is_inside_polygon(testLat, testLong, latArray.get(i), lonArray.get(i))) {
+        for (int i = 0; i < popPoints.size(); i++) {
+            if (coordinate_is_inside_polygon(testLat, testLong, popPoints.get(i))) {
                 indexOfContained = i;
                 arrayContained = 0;
                 break;
             }
         }
         if (arrayContained == -1) {
-            for (int i = 0; i < lightlyPopulatedLatArray.size(); i++) {
-                if (coordinate_is_inside_polygon(testLat, testLong, lightlyPopulatedLatArray.get(i), lightlyPopulatedLonArray.get(i))) {
+            for (int i = 0; i < lightlyPopPoints.size(); i++) {
+                if (coordinate_is_inside_polygon(testLat, testLong, lightlyPopPoints.get(i))) {
                     indexOfContained = i;
                     arrayContained = 1;
                     break;
@@ -339,7 +321,7 @@ public class GPS_Intersection
         return new int[]{indexOfContained, arrayContained};
     }
 
-    public GraphPath shortestPath(double[] destination) {
+    public GraphPath shortestPath(WaypointNode destination) {
         return new GraphPath(destination, this, pathToPolygons);
     }
 
@@ -356,7 +338,7 @@ public class GPS_Intersection
 
     public static boolean coordinate_is_inside_polygon(
             double latitude, double longitude,
-            ArrayList<Double> lat_array, ArrayList<Double> long_array)
+            ArrayList<WaypointNode> point_array)
     {
         int i;
         double angle=0;
@@ -364,14 +346,14 @@ public class GPS_Intersection
         double point1_long;
         double point2_lat;
         double point2_long;
-        int n = lat_array.size();
+        int n = point_array.size();
 
         for (i=0;i<n;i++) {
-            point1_lat = lat_array.get(i) - latitude;
-            point1_long = long_array.get(i) - longitude;
-            point2_lat = lat_array.get((i+1)%n) - latitude;
+            point1_lat = point_array.get(i).getLatitude() - latitude;
+            point1_long = point_array.get(i).getLongitude() - longitude;
+            point2_lat = point_array.get((i+1)%n).getLatitude() - latitude;
             //you should have paid more attention in high school geometry.
-            point2_long = long_array.get((i+1)%n) - longitude;
+            point2_long = point_array.get((i+1)%n).getLongitude() - longitude;
             angle += Angle2D(point1_lat,point1_long,point2_lat,point2_long);
         }
 
@@ -391,29 +373,5 @@ public class GPS_Intersection
             dtheta += TWO_PI;
 
         return(dtheta);
-    }
-
-
-    public double[] minMax() {
-        double min = Double.MAX_VALUE;
-        double max = Double.MIN_VALUE;
-        for (int i = 0; i < latArray.size(); i++) {
-            ArrayList<Double> firstLat = latArray.get(i);
-            ArrayList<Double> firstLon = lonArray.get(i);
-            for (int j = 0; j < firstLat.size(); j++) {
-                for (int k = 0; k < latArray.size(); k++) {
-                    ArrayList<Double> secondLat = latArray.get(k);
-                    ArrayList<Double> secondLong = lonArray.get(k);
-                    for (int l = 0; l < latArray.size(); l++) {
-                        if (j != l) {
-                            double distance = GeometryLogistics.calculateDistanceToWaypoint(firstLat.get(j), firstLon.get(j), secondLat.get(l), secondLong.get(l));
-                            min = Math.min(min, distance);
-                            max = Math.max(max, distance);
-                        }
-                    }
-                }
-            }
-        }
-        return new double[]{min, max};
     }
 }

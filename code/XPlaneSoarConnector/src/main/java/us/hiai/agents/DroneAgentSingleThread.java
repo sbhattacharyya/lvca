@@ -72,8 +72,8 @@ public class DroneAgentSingleThread
         String flightPlanInputFile = "/home/dgriessl/X-Plane 11/Output/FMS plans/DallasOut156.fms";
         fpp = new FlightPlanParser(flightPlanInputFile);
         gpsIntersect = new GPS_Intersection("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
-        flightWeb = gpsIntersect.shortestPath(new double[]{fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()});
-        closestLoiterPoint = new LoiterInput(new WaypointNode(fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()));
+        flightWeb = gpsIntersect.shortestPath(fpp.getCurrentWaypoint());
+        closestLoiterPoint = new LoiterInput(fpp.getCurrentWaypoint());
         data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
         startAlt = XPlaneConnector.getValueFromSim("sim/cockpit2/gauges/indicators/altitude_ft_pilot");
 
@@ -221,12 +221,15 @@ public class DroneAgentSingleThread
         @Override
         public void run() {
             while (Math.abs(dst.data.altitude - setAltitude + dst.startAlt) > 1) {
+                // attempt to do linear descent.  Not working correctly
 //                double currentTime = System.nanoTime() / 6e+10;
 //                float val = (float)(Math.round((2*coefA*(currentTime - zeroTime) - 5000) / 100) * 100);
 //                if (val > 0) {
 //                    break;
 //                }
 //                System.out.println("zeroTime: " + zeroTime + " currentTime: " + currentTime + "with coefA: " + coefA +" calculated run val: " + val);
+
+                // currently constant descent.  Should make it more speedy by fixing the linear descent
                 float val = -500;
                 setValueOnSim("sim/cockpit/autopilot/vertical_velocity", val);
                 try {
