@@ -12,9 +12,9 @@ import us.hiai.util.GraphPath.Node;
 import us.hiai.util.WaypointNode;
 
 public class CollectDecisions {
-    HashSet<Decision> previousDecisions;
-    String pathToQuadtree;
-    Node[] elements;
+    private HashSet<Decision> previousDecisions;
+    private String pathToQuadtree;
+    private Node[] elements;
     public CollectDecisions(String pathToQuadtree, Node[] elements) {
         this.pathToQuadtree = pathToQuadtree;
         this.elements = elements;

@@ -125,7 +125,8 @@ public class DroneAgentSingleThread
                 add("takeOver", takeOver).markWme("tOver").
                 add("removeCommand", blank).markWme("rC").
                 add("willBeInPopulatedArea", "null").markWme("wPA").
-                add("startTimer", false).markWme("sT");
+                add("startTimer", false).markWme("sT").
+                add("previousDecision", "null").markWme("pd");
 
         sagt.getEvents().addListener(OutputEvent.class, soarEvent -> {
             System.out.println("OUT EVENT");
@@ -189,6 +190,12 @@ public class DroneAgentSingleThread
                         // autopilot state = 18 for vs control
                         // sim/cockpit/autopilot/vertical_velocity = x hundreds of feet per minute
                         returnToAltitudeFloor(command, setAltitude);
+                        break;
+                    case "searchDecisions":
+                        String decision = previousDecisions.getClosestDecision(data.lat, data.lon, GeometryLogistics.calculateDistance(data.groundSpeed, 60));
+                        builder.getWme("pd").update(syms.createString(decision));
+                        removeCommandWME = builder.getWme("rC");
+                        removeCommandWME.update(command);
                         break;
                     default:
                         break;
@@ -307,7 +314,10 @@ public class DroneAgentSingleThread
     private void pushFlightData()
     {
         while (!decisionCycle.isHalted()) {
-            System.out.println("Rules size: " + sagt.getProductions().getProductionCount());
+//            for (ProductionType pt : ProductionType.values()) {
+//                System.out.println("Rules size: " + pt.name() + " "+ sagt.getProductions().getProductions(pt).size());
+//            }
+
             if (sagt.getProductions().getProductions(ProductionType.CHUNK).size() > 0) {
                 System.out.println("CHUNKS: ");
                 for (Production nextChunk : sagt.getProductions().getProductions(ProductionType.CHUNK)) {
