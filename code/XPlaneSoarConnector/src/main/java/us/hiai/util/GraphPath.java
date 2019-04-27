@@ -16,7 +16,7 @@ import java.util.concurrent.*;
  *
  */
 public class GraphPath {
-    static class Node {
+    public static class Node {
         private WaypointNode point;
         int polygonIndex;
         Node(WaypointNode point, int polygonIndex) {

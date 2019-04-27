@@ -107,14 +107,18 @@ public class TrackClosestLoiter implements Runnable {
                     set.add(future);
                 }
                 for (Future<DistancesCalculatorOutput> nextOut : set) {
-                    DistancesCalculatorOutput val = null;
-                    try {
-                        val = nextOut.get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        e.printStackTrace();
-                    }
-                    if (val != null) {
-                        loiterPoints.replaceKey(insertedPoints.get(val.index), val.distances);
+                    if (!dast.getClosestLoiterPoint().isKeepCalculating()) {
+                        nextOut.cancel(true);
+                    } else {
+                        DistancesCalculatorOutput val = null;
+                        try {
+                            val = nextOut.get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            e.printStackTrace();
+                        }
+                        if (val != null) {
+                            loiterPoints.replaceKey(insertedPoints.get(val.index), val.distances);
+                        }
                     }
                 }
                 System.out.printf("Tracking took in seconds: %f\t\tYou flew nm from last point: %f\n", (System.nanoTime() - start) / 1e+9, GeometryLogistics.calculateDistanceToWaypoint(lastCalcLatAndLon[0], lastCalcLatAndLon[1], dast.getData().lat, dast.getData().lon) / GeometryLogistics.NM_METERS);

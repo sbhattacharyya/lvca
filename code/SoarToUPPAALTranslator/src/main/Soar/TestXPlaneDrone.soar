@@ -28,21 +28,79 @@ sp {applyWait
     (<s> ^wait-flag <w> -)
 }
 
+sp {drone*apply*takeOver
+    "Issues first command when takeover is active"
+    :o-support
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^commands)
+    (<fd> ^takeOver true)
+    -->
+    (<s> ^sentCommand aiOn)
+    (write (crlf) |Sending AiON Command!|)
+}
+
+sp {drone*apply*updateOut*setAIOn
+    "Creates command on output for sending to XPlane to turn on the AI"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sentCommand aiOn)
+    (<fd> ^takeOver true)
+    -->
+    (<out> ^command <com>)
+    (<com> ^dref sim/cockpit/autopilot/autopilot_state
+           ^setValue 16386
+           ^name setAIOn)
+    (<s> ^sentCommand aiOn -
+         ^commands aiIsOn)
+    (write (crlf) |Adding AI_ON!|)
+}
+
+
+sp {drone*propose*operator*C2-Lost-Link-Start
+    "In lightly populated area, could start just a minute timer and turn around since will pass over or enter a populated area in one minute"
+    (state <s> ^name droneFlight ^acknowledgedCommands setAIOn)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name C2-Start
+         ^timerLength 1)
+    (write (crlf) |PROPOSE C2!|)
+}
+
+sp {drone*propose*operator*C3-Lost-Link-Start
+    "In lightly populated area, could start 8 minute timer and after that turn around since I won't be in a populated area for a while"
+    (state <s> ^name droneFlight ^acknowledgedCommands setAIOn)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name C3-Start
+         ^timerLength 8)
+    (write (crlf) |PROPOSE C3!|)
+}
+
 sp {drone*apply*operator*C2-Lost-Link
     "Return to base via shortest path after 1 minute following loss of link to avoid flight over populous areas"
-    :o-support
-    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn)
-    (<fd> ^takeOver true ^populated fully)
-    -->
+    (state <s> ^name droneFlight ^operator <o> ^io.input-link.flightdata <fd> ^acknowledgedCommands setAIOn)
+    (<fd> ^takeOver true)
+    (<o> ^name C2-Start)
+   -->
     (<s> ^addressedProblem C2 ^maxTimers 1 ^currentTimers 0 ^startNewTimer true)
+    (<s> ^acknowledgedCommands setAIOn -)
     (write (crlf) |FOUND C2!|)
+}
+
+sp {drone*resolve*startConflict
+    "If the starts have overlap, go with the lowest one"
+    (state <s> ^impasse tie ^item <n1> {<> <n1> <n2>} ^superstate <s1>)
+    (<n1> ^name <name1> ^timerLength <l1>)
+    (<n2> ^name <name2> ^timerLength {> <l1>})
+    -->
+    (<s1> ^operator <n1> > <n2>)
+    (write (crlf) |Resolve | <name1>)
 }
 
 sp {drone*apply*operator*C3-Lost-Link
     "Return to base via shortest path after 8 minutes following lost of link to avoid flight over populous areas"
     :o-support
-    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn)
-    (<fd> ^takeOver true ^populated lightly)
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^addressedProblem ^acknowledgedCommands setAIOn ^operator <o>)
+    (<fd> ^takeOver true)
+    (<o> ^name C3-Start)
     -->
     (<s> ^addressedProblem C3 ^maxTimers 8 ^currentTimers 0 ^startNewTimer true)
     (write (crlf) |FOUND C3!|)
@@ -126,30 +184,9 @@ sp {drone*apply*commandToStartTimer
     (write (crlf) |Querying population!|)
 }
 
-sp {drone*apply*takeOver
-    "Issues first command when takeover is active"
-    :o-support
-    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> -^commands)
-    (<fd> ^takeOver true)
-    -->
-    (<s> ^sentCommand aiOn)
-    (write (crlf) |Sending AiON Command!|)
-}
 
-sp {drone*apply*updateOut*setAIOn
-    "Creates command on output for sending to XPlane to turn on the AI"
-    :o-support
-    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sentCommand aiOn)
-    (<fd> ^takeOver true)
-    -->
-    (<out> ^command <com>)
-    (<com> ^dref sim/cockpit/autopilot/autopilot_state
-           ^setValue 16386
-           ^name setAIOn)
-    (<s> ^sentCommand aiOn -
-         ^commands aiIsOn)
-    (write (crlf) |Adding AI_ON!|)
-}
+
+
 
 sp {drone*apply*updateOut*reverseWaypoints
     "Creates command on output for sending to XPlane to overwrite the way points to return to home"
@@ -193,13 +230,27 @@ sp {drone*apply*updateOut*goToAltitudeFloor
     (write (crlf) | Adding Return to Altitude Floor Command!|)
 }
 
+sp {drone*apply*updateOut*searchForPreviousDecision
+    "Creates command on output to tell Java to search and return a close previous decision"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^sentCommand searchPreviousDecisions)
+    (<fd> ^takeOver true)
+    -->
+    (<out> ^command <com>)
+    (<com> ^dref null
+           ^setValue null
+           ^name searchDecisions)
+    (<s> ^sentCommand searchPreviousDecisions -)
+    (write (crlf) | Adding Search Previous Decisions Command!|)
+}
+
 sp {drone*removeOutputCommand
     "Removes output command"
     :o-support
     (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd>)
     (<fd> ^removeCommand <rc>)
     (<out> ^command <rc>)
-    (<rc> ^name {<> timerChecker <n>})
+    (<rc> ^name {<> timerChecker <> searchDecisions <n>})
     -->
     (<out> ^command <rc> -)
     (<s> ^acknowledgedCommands <n>)
@@ -217,6 +268,23 @@ sp {drone*markInPopulatedArea
     -->
     (<out> ^command <rc> -)
     (<s> ^willBeInPopulatedArea <wPA>)
+    (<s> ^acknowledgedCommands timerChecker)
     (write (crlf) |Removing timerChecker command!|)
     (write (crlf) |Calculated WillBeInPopulatedArea as : | <wPA>)
+}
+
+sp {drone*markPreviousDecision
+    "Removes timer start command and creates local decision choice wme.  The return decision will either be the closest decision or C2 as the default"
+    :o-support
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd>)
+    (<fd> ^removeCommand <rc>
+          ^decision <d>)
+    (<out> ^command <rc>)
+    (<rc> ^name searchDecisions)
+    -->
+    (<out> ^command <rc> -)
+    (<s> ^decision <d>)
+    (<s> ^acknowledgedCommands searchDecisions)
+    (write (crlf) |Received the closest decision or default C2!|)
+    (write (crlf) |Decision : | <d>)
 }

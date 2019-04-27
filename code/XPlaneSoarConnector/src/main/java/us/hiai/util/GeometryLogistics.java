@@ -90,7 +90,7 @@ public class GeometryLogistics {
         return distanceIntersected;
     }
 
-    static String checkLineIntersectsPopulated(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
+    private static String checkLineIntersectsPopulated(double currentLat, double currentLong, double currentBearing, double maxDistance, GPS_Intersection gpsIntersect) {
         double currentDistance = maxDistance;
         double[] destination;
         String result = "null";

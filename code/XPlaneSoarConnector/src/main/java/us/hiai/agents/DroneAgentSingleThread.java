@@ -1,6 +1,6 @@
 package us.hiai.agents;
 
-import org.antlr.v4.misc.Graph;
+import freemarker.cache.ConcurrentCacheStorage;
 import org.jsoar.kernel.*;
 import org.jsoar.kernel.events.OutputEvent;
 import org.jsoar.kernel.io.InputBuilder;
@@ -12,18 +12,25 @@ import org.jsoar.util.adaptables.Adaptables;
 import org.jsoar.util.commands.SoarCommands;
 import us.hiai.data.FlightData;
 import us.hiai.util.*;
+import us.hiai.util.QuadtreeStructure.CollectDecisions;
+import us.hiai.util.QuadtreeStructure.Decision;
 import us.hiai.xplane.XPlaneConnector;
 
 import java.io.*;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Scanner;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static us.hiai.xplane.XPlaneConnector.*;
 
+/**
+ * Created by Daniel Griessler Spring 2019
+ */
 public class DroneAgentSingleThread
 {
     private SymbolFactory syms;
@@ -38,6 +45,7 @@ public class DroneAgentSingleThread
     private FlightData data;
     private LoiterInput closestLoiterPoint;
     private double startAlt;
+    private CollectDecisions previousDecisions;
 
     public GraphPath getFlightWeb() {
         return flightWeb;
@@ -76,6 +84,7 @@ public class DroneAgentSingleThread
         closestLoiterPoint = new LoiterInput(fpp.getCurrentWaypoint());
         data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
         startAlt = XPlaneConnector.getValueFromSim("sim/cockpit2/gauges/indicators/altitude_ft_pilot");
+        //previousDecisions = new CollectDecisions("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/QuadtreeStructure", flightWeb.getElements());
 
         sagt = new Agent();
         sagt.setName("DroneSingle");
@@ -193,6 +202,12 @@ public class DroneAgentSingleThread
         pushFlightData();
         sagt.dispose();
         ff.cancel(true);
+        closestLoiterPoint.keepCalculating = false;
+        try {
+            ff1.get();
+        } catch(InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        }
         ff1.cancel(true);
     }
 
@@ -292,6 +307,14 @@ public class DroneAgentSingleThread
     private void pushFlightData()
     {
         while (!decisionCycle.isHalted()) {
+            System.out.println("Rules size: " + sagt.getProductions().getProductionCount());
+            if (sagt.getProductions().getProductions(ProductionType.CHUNK).size() > 0) {
+                System.out.println("CHUNKS: ");
+                for (Production nextChunk : sagt.getProductions().getProductions(ProductionType.CHUNK)) {
+                    System.out.println(nextChunk.toString());
+                }
+            }
+
             data = getFlightData(gpsIntersect);
 
             if (data.lat != 0 || data.lon != 0) {
