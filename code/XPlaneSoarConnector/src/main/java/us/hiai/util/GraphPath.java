@@ -489,7 +489,7 @@ public class GraphPath {
             directionsHome = backTrace(nonPopulatedToHome, nodeHome);
         }
 
-        System.out.printf("Path finding took: %f\n", (System.nanoTime() - startTime) / 6e+10);
+        System.out.printf("Home Path finding took: %f\n", (System.nanoTime() - startTime) / 6e+10);
         System.out.flush();
         return directionsHome;
     }

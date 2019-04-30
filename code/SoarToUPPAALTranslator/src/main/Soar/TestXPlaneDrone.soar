@@ -14,7 +14,7 @@ sp {drone*apply*initialize
 
 # No operators to choose from, perform no-op
 sp {proposeWait
-    (state <s> ^name droneFlight ^wait-flag <w>)
+    (state <s> ^name droneFlight ^wait-flag <w> -^startContingency)
     -->
     (<s> ^operator <o> + <)
     (<o> ^name Processing)
@@ -56,7 +56,6 @@ sp {drone*propose*operator*queryPreviousDecision
     "Proposes soar agent searches for the closest previous decision within a 1 minute flight"
     (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^acknowledgedCommands setAIOn)
     (<fd> ^takeOver true)
-    (<o> ^name searchPreviousDecisions)
     -->
     (<s> ^operator <o> +)
     (<o> ^name searchPreviousDecisions)
@@ -79,27 +78,35 @@ sp {drone*apply*operator*queryPreviousDecision
 
 sp {drone*propose*usePreviousDecision
     "Propose using the previous decision that was provided"
-    (state <s> ^name droneFlight ^io.input-link <fd> ^decision <d>)
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^acknowledgedCommands searchDecisions ^previousDecisionCommand <com> ^previousDecisionValue <val>)
     (<fd> ^takeOver true)
     -->
     (<s> ^operator <o> +)
-    (<o> ^decision <d>)
-    (write (crlf) |Got the previous decision: | <d>)
+    (<o> ^name applyPreviousDecision)
+    (write (crlf) |Got the previous decision|)
 }
 
-// need to formulate how I will pass the decisions I make back and forth to java
-// if I can create more sophisticated input WME then I can set up something like string: maxTimers value: 1
-// that way it generalizes to any new rules I would make though that assumes that the rules are stored in Soar
-// right now my saved knowledge is stored in java with the goal of that log(n) search
+sp {drone*apply*throwAwayPreviousDecision
+    "Disregard the previous null decision"
+    (state <s> ^name droneFlight ^io.input-link <fd> ^operator <o> ^previousDecisionCommand null ^previousDecisionValue <val>)
+    (<o> ^name applyPreviousDecision)
+    -->
+    (<s> ^acknowledgedCommands searchDecisions -)
+    (<s> ^previousDecisionCommand null - ^previousDecisionValue <val> -)
+    (<s> ^startContingency true)
+    (write (crlf) |Ignoring null decision |)
+}
 
 sp {drone*apply*usePreviousDecision
-    "Apply the previous non null decision"
-    (state <s> ^name droneFlight ^io.input-link <fd> ^operator <o>)
-    (<o> ^decision {<> null <d>})
+    "Apply the previous timer decision"
+    (state <s> ^name droneFlight ^io.input-link <fd> ^operator <o> ^previousDecisionCommand timer ^previousDecisionValue <val>)
+    (<o> ^name applyPreviousDecision)
     -->
-    (<s> ^decision <d> -)
+    (<s> ^addressedProblem previousDecision ^maxTimers <val> ^startNewTimer true)
     (<s> ^acknowledgedCommands searchDecisions -)
-
+    (<s> ^previousDecisionCommand null - ^previousDecisionValue <val> -)
+    (write (crlf) |Starting saved timer command with max timers:  | <val> )
+}
 
 sp {drone*propose*operator*C2-Lost-Link-Start
     "In lightly populated area, could start just a minute timer and turn around since will pass over or enter a populated area in one minute"
@@ -146,12 +153,12 @@ sp {drone*apply*operator*StartTimerLostLinkFirst
 
 sp {drone*apply*operator*StartTimerLostLinkLater
     "Return to base via shortest path after so many minutes following shortest path. Deletes old maxTimers value if its there"
-    (state <s> ^name droneFlight ^operator <o> ^io.input-link.flightdata <fd> ^startContingency true ^maxTimers <mT>)
+    (state <s> ^name droneFlight ^operator <o> ^io.input-link.flightdata <fd> ^startContingency true ^maxTimers <mT> ^addressedProblem <ap>)
     (<o> ^name <n>
          ^timerLength <tl>)
     (<fd> ^takeOver true)
    -->
-    (<s> ^addressedProblem <n> ^maxTimers <tl> ^maxTimers <mT> - ^startNewTimer true)
+    (<s> ^addressedProblem <n> ^addressedProblem <ap> - ^maxTimers <tl> ^maxTimers <mT> - ^startNewTimer true)
     (<s> ^startContingency true -)
     (write (crlf) |FOUND_1 | <n>)
 }
@@ -180,7 +187,6 @@ sp {drone*apply*outOfTimeMarkContingency
     -->
     (<s> ^contingencyComplete <ap>
          ^startContingency true)
-    (<s> ^addressedProblem <ap> -)
     (write (crlf) |Marked as complete: | <ap>)
 }
 
@@ -195,14 +201,12 @@ sp {drone*propose*turnAround
 
 sp {drone*apply*turnAround
     "Apply turn around and return to base"
-    (state <s> ^name droneFlight ^operator <o> ^startContingency true ^currentTimers <cT> ^maxTimers <mT>)
+    (state <s> ^name droneFlight ^operator <o> ^startContingency true)
     (<o> ^name turnAround)
     -->
     (<s> ^startContingency true -
          ^sentCommand reverse
-         ^startNewTimer true -
-         ^currentTimers <cT> -
-         ^maxTimers <mT> -)
+         ^startNewTimer true -)
     (write (crlf) |Applying turn around!|)
 }
 
@@ -293,17 +297,12 @@ sp {drone*propose*returnToBase*populated
 
 sp {drone*apply*returnToBase*emergency
    "Execute turn and retrace way points to home since we made the correct decision"
-   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^operator <o> ^maxTimers <mt> ^currentTimers <cT>)
+   (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^operator <o>)
    (<fd> ^takeOver true)
    (<o> ^name turnAroundEmergency)
    -->
    (<s> ^sentCommand reverse)
-   (<s> ^sentCommand <send-com>)
-   (<send-com> ^name saveDecision
-               ^numTimers (- <cT> 1))
    (<s> ^flewOverPopulatedArea false -)
-   (<s> ^maxTimers <mT> -)
-   (<s> ^currentTimers <cT> -)
    (write (crlf) |Return To Base because projected to be in populated!|)
 }
 
@@ -339,11 +338,37 @@ sp {drone*removeOutputCommand
     (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd>)
     (<fd> ^removeCommand <rc>)
     (<out> ^command <rc>)
-    (<rc> ^name {<> timerChecker <> searchDecisions <> setAIOn <n>})
+    (<rc> ^name {<> timerChecker <> searchDecisions <> setAIOn <> reverseWaypoints <n>})
     -->
     (<out> ^command <rc> -)
     (<s> ^acknowledgedCommands <n>)
     (write (crlf) |Removing Output Command!  | <n> )
+}
+
+sp {drone*propose*acknowledgeReverseAndSaveDecision
+   "Catch reverse command return"
+   (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^currentTimers <cT>)
+   (<fd> ^removeCommand <rc>)
+   (<out> ^command <rc>)
+   (<rc> ^name reverseWaypoints)
+   -->
+   (<s> ^operator <o> +)
+   (<o> ^name saveDecision ^value <cT> ^removeCommand <rc>)
+   (write (crlf) |Caught reverse return! Proposing saving decision.|)
+}
+
+sp {drone*apply*acknowledgeReverseAndSaveDecision
+    "After reverse command has been served, send saved decision to be cataloged"
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^currentTimers <cT> ^maxTimers <mT> ^operator <o> ^addressedProblem <ap>)
+    (<o> ^name saveDecision ^value <v> ^removeCommand <rc>)
+    -->
+    (<out> ^command <rc> -)
+    (<out> ^command <com>)
+    (<com> ^dref <ap>
+            ^setValue <v>
+            ^name saveDecision)
+    (<s> ^maxTimers <mT> - ^currentTimers <cT> - ^addressedProblem <ap> -)
+    (write (crlf) |Removing reverse command!  Sending saved decision! |)
 }
 
 sp {drone*markAiOn
@@ -356,7 +381,6 @@ sp {drone*markAiOn
     -->
     (<out> ^command <rc> -)
     (<s> ^acknowledgedCommands setAIOn)
-    (<s> ^startContingency true)
     (write (crlf) |Removing setAIOn command!|)
 }
 
@@ -380,14 +404,12 @@ sp {drone*markPreviousDecision
     "Removes timer start command and creates local decision choice wme.  The return decision will either be the closest decision or C2 as the default"
     :o-support
     (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd>)
-    (<fd> ^removeCommand <rc>
-          ^decision <d>)
+    (<fd> ^removeCommand <rc> ^previousDecisionCommand <com> ^previousDecisionValue <val>)
     (<out> ^command <rc>)
     (<rc> ^name searchDecisions)
     -->
     (<out> ^command <rc> -)
-    (<s> ^decision <d>)
     (<s> ^acknowledgedCommands searchDecisions)
+    (<s> ^previousDecisionCommand <com> ^previousDecisionValue <val>)
     (write (crlf) |Received the closest decision or default C2!|)
-    (write (crlf) |Decision : | <d>)
 }

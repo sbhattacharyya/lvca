@@ -1,15 +1,18 @@
 package us.hiai.agents;
 
-import freemarker.cache.ConcurrentCacheStorage;
 import org.jsoar.kernel.*;
 import org.jsoar.kernel.events.OutputEvent;
 import org.jsoar.kernel.io.InputBuilder;
 import org.jsoar.kernel.io.InputWme;
+import org.jsoar.kernel.lhs.Condition;
 import org.jsoar.kernel.memory.Wme;
+import org.jsoar.kernel.rhs.Action;
 import org.jsoar.kernel.symbols.Symbol;
 import org.jsoar.kernel.symbols.SymbolFactory;
+import org.jsoar.kernel.tracing.Trace;
 import org.jsoar.util.adaptables.Adaptables;
 import org.jsoar.util.commands.SoarCommands;
+import org.slf4j.Logger;
 import us.hiai.data.FlightData;
 import us.hiai.util.*;
 import us.hiai.util.QuadtreeStructure.CollectDecisions;
@@ -17,7 +20,6 @@ import us.hiai.util.QuadtreeStructure.Decision;
 import us.hiai.xplane.XPlaneConnector;
 
 import java.io.*;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -46,6 +48,7 @@ public class DroneAgentSingleThread
     private LoiterInput closestLoiterPoint;
     private double startAlt;
     private CollectDecisions previousDecisions;
+    private Decision selectedPreviousDecision;
 
     public GraphPath getFlightWeb() {
         return flightWeb;
@@ -84,7 +87,7 @@ public class DroneAgentSingleThread
         closestLoiterPoint = new LoiterInput(fpp.getCurrentWaypoint());
         data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
         startAlt = XPlaneConnector.getValueFromSim("sim/cockpit2/gauges/indicators/altitude_ft_pilot");
-        //previousDecisions = new CollectDecisions("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/QuadtreeStructure", flightWeb.getElements());
+        previousDecisions = new CollectDecisions("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/QuadtreeStructure");
 
         sagt = new Agent();
         sagt.setName("DroneSingle");
@@ -126,7 +129,8 @@ public class DroneAgentSingleThread
                 add("removeCommand", blank).markWme("rC").
                 add("willBeInPopulatedArea", "null").markWme("wPA").
                 add("startTimer", false).markWme("sT").
-                add("previousDecision", "null").markWme("pd");
+                add("previousDecisionCommand", "null").markWme("pd_com").
+                add("previousDecisionValue", 0).markWme("pd_val");
 
         sagt.getEvents().addListener(OutputEvent.class, soarEvent -> {
             System.out.println("OUT EVENT");
@@ -192,8 +196,27 @@ public class DroneAgentSingleThread
                         returnToAltitudeFloor(command, setAltitude);
                         break;
                     case "searchDecisions":
-                        String decision = previousDecisions.getClosestDecision(data.lat, data.lon, GeometryLogistics.calculateDistance(data.groundSpeed, 60));
-                        builder.getWme("pd").update(syms.createString(decision));
+                        selectedPreviousDecision = previousDecisions.getClosestDecision(data.lat, data.lon, GeometryLogistics.calculateDistance(data.groundSpeed, 60));
+                        System.out.println("TOTAL DISTANCE: " + GeometryLogistics.calculateDistance(data.groundSpeed, 60));
+                        if (selectedPreviousDecision == null) {
+                            builder.getWme("pd_com").update(syms.createString("null"));
+                        } else {
+                            builder.getWme("pd_com").update(syms.createString(selectedPreviousDecision.getDecision()));
+                            Integer decisionValue = selectedPreviousDecision.getValue();
+                            if (decisionValue != null) {
+                                builder.getWme("pd_val").update(syms.createInteger(selectedPreviousDecision.getValue()));
+                            }
+                        }
+                        removeCommandWME = builder.getWme("rC");
+                        removeCommandWME.update(command);
+                        break;
+                    case "saveDecision":
+                        int timerLength = (int)setValue.asInteger().getValue();
+                        WaypointNode decisionPoint = new WaypointNode(data.lat, data.lon);
+                        if (selectedPreviousDecision != null) {
+                            dref = selectedPreviousDecision.getDecision();
+                        }
+                        previousDecisions.addDecision(decisionPoint, dref, timerLength);
                         removeCommandWME = builder.getWme("rC");
                         removeCommandWME.update(command);
                         break;
@@ -202,6 +225,13 @@ public class DroneAgentSingleThread
                 }
             }
         });
+//        sagt.getTrace().setWatchLevel(5);
+//        sagt.getTrace().setEnabled(Trace.Category.BACKTRACING, true);
+        try {
+            sagt.getInterpreter().eval("learn -e");
+        } catch (SoarException e) {
+            e.printStackTrace();
+        }
 
         syms = sagt.getSymbols();
         Future ff = Executors.newSingleThreadExecutor().submit(this::flipFlag);
@@ -314,17 +344,21 @@ public class DroneAgentSingleThread
     private void pushFlightData()
     {
         while (!decisionCycle.isHalted()) {
+//            try {
+//                sagt.getInterpreter().eval("matches drone*propose*usePreviousDecision");
+//            } catch (SoarException e) {
+//                e.printStackTrace();
+//            }
 //            for (ProductionType pt : ProductionType.values()) {
 //                System.out.println("Rules size: " + pt.name() + " "+ sagt.getProductions().getProductions(pt).size());
 //            }
-
-            if (sagt.getProductions().getProductions(ProductionType.CHUNK).size() > 0) {
-                System.out.println("CHUNKS: ");
-                for (Production nextChunk : sagt.getProductions().getProductions(ProductionType.CHUNK)) {
-                    System.out.println(nextChunk.toString());
-                }
-            }
-
+//            System.out.println("NUM CHUNKS: " + sagt.getProductions().getProductions(ProductionType.CHUNK).size());
+//            if (sagt.getProductions().getProductions(ProductionType.CHUNK).size() > 0) {
+//                System.out.println("CHUNKS: ");
+//                for (Production nextChunk : sagt.getProductions().getProductions(ProductionType.CHUNK)) {
+//                    nextChunk.print(sagt.getPrinter(), true);
+//                }
+//            }
             data = getFlightData(gpsIntersect);
 
             if (data.lat != 0 || data.lon != 0) {

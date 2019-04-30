@@ -4,20 +4,17 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Scanner;
+import java.util.*;
 
 import us.hiai.util.GeometryLogistics;
-import us.hiai.util.GraphPath.Node;
 import us.hiai.util.WaypointNode;
 
 public class CollectDecisions {
-    private HashSet<Decision> previousDecisions;
+    private HashMap<WaypointNode, Decision> previousDecisions;
     private String pathToQuadtree;
-    private Node[] elements;
-    public CollectDecisions(String pathToQuadtree, Node[] elements) {
+    public CollectDecisions(String pathToQuadtree) {
         this.pathToQuadtree = pathToQuadtree;
-        this.elements = elements;
+        previousDecisions = new HashMap<>();
         File stored = new File(pathToQuadtree + "/storedDecisions.txt");
         try {
             if (stored.createNewFile()) {
@@ -28,38 +25,48 @@ public class CollectDecisions {
                 System.out.printf("Found storedDecisions.txt in %s\n", pathToQuadtree);
                 System.out.println("Loading storedDecisions.txt....");
                 Scanner reader = new Scanner(stored);
-                int size = reader.nextInt();
-                for (int i = 0; i < size; i++) {
-                    int nextPointIndex = reader.nextInt();
-                    reader.next();
-                    String nextDecision = reader.next();
-                    previousDecisions.add(new Decision(nextPointIndex, nextDecision));
+                try {
+                    int size = reader.nextInt();
+                    for (int i = 0; i < size; i++) {
+                        double nextLat = reader.nextDouble();
+                        double nextLon = reader.nextDouble();
+                        String nextDecision = reader.next();
+                        String nextValue = reader.next();
+                        Integer realNextValue;
+                        if (nextValue.equals("null")) {
+                            realNextValue = null;
+                        } else {
+                            realNextValue = Integer.parseInt(nextValue);
+                        }
+                        previousDecisions.put(new WaypointNode(nextLat, nextLon), new Decision(nextDecision, realNextValue));
+                    }
+                } catch(NoSuchElementException ignored) {
+
                 }
                 reader.close();
                 System.out.println("storedDecisions.txt Loaded");
             }
-
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private WaypointNode getPosOfDecision(Decision ref) {
-        return elements[ref.getPoint()].getPoint();
-    }
-
-    public String getClosestDecision(double planeLat, double planeLon, double maxDistance) {
-        String minDecision = null;
+    public Decision getClosestDecision(double planeLat, double planeLon, double maxDistance) {
+        Decision minDecision = null;
         double minDistance = Double.MAX_VALUE;
-        for (Decision next : previousDecisions) {
-            WaypointNode currentDecisionPos = getPosOfDecision(next);
+        for (WaypointNode currentDecisionPos : previousDecisions.keySet()) {
             double distanceToDecisionPoint = GeometryLogistics.calculateDistanceToWaypoint(planeLat, planeLon, currentDecisionPos.getLatitude(), currentDecisionPos.getLongitude());
             if (distanceToDecisionPoint <= maxDistance && distanceToDecisionPoint < minDistance) {
-                minDecision = next.getDecision();
+                minDecision = previousDecisions.get(currentDecisionPos);
                 minDistance = distanceToDecisionPoint;
             }
         }
         return minDecision;
+    }
+
+    public void addDecision(WaypointNode point, String decision, Integer value) {
+        previousDecisions.put(point, new Decision(decision, value));
+        save();
     }
 
     public void save() {
@@ -67,8 +74,30 @@ public class CollectDecisions {
         try {
             BufferedWriter writer =  new BufferedWriter(new FileWriter(stored));
             writer.write(previousDecisions.size() + " ");
-            for (Decision nextDecision : previousDecisions) {
-                writer.write(nextDecision.getPoint() + " " + nextDecision.decision + " ");
+            for (WaypointNode nextWaypoint : previousDecisions.keySet()) {
+                Decision nextDecision = previousDecisions.get(nextWaypoint);
+                Integer nextDecisionValue = nextDecision.value;
+                String saveDecisionValue;
+                if (nextDecisionValue == null) {
+                    saveDecisionValue = "null ";
+                } else {
+
+                    saveDecisionValue = nextDecisionValue + " ";
+                }
+                String saveDecision;
+                switch (nextDecision.decision) {
+                    case "null":
+                        saveDecision = "null";
+                        break;
+                    case "C2-Start":
+                    case "C3-Start":
+                        saveDecision = "timer";
+                        break;
+                    default:
+                        saveDecision = nextDecision.decision;
+                        break;
+                }
+                writer.write(nextWaypoint.getLatitude() + " " + nextWaypoint.getLongitude() + " " + saveDecision + " " + saveDecisionValue);
             }
             writer.close();
         } catch (IOException e) {

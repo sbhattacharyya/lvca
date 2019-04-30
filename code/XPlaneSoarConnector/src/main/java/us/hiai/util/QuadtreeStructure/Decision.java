@@ -1,12 +1,12 @@
 package us.hiai.util.QuadtreeStructure;
 
 public class Decision {
-    int pointIndex;
     String decision;
-    Decision(int pointIndex, String decision) {
-        this.pointIndex = pointIndex;
+    Integer value;
+    Decision(String decision, Integer value) {
         this.decision = decision;
+        this.value = value;
     }
-    public int getPoint() {return pointIndex;}
     public String getDecision() {return decision;}
+    public Integer getValue() {return value;}
 }
