@@ -127,5 +127,6 @@ public class TrackClosestLoiter implements Runnable {
                 updateClosestLoiter();
             }
         }
+        System.out.println("Stopped tracking!");
     }
 }

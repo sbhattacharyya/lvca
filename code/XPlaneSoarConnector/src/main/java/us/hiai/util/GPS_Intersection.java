@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Scanner;
 
 /**
+ * Created by Daniel Griessler Spring 2019
  * Creates polygons on map needed for GPS testing whether in populated area or not
  * To modify: create polygons using GPS coordinates.  I used SkyVector to place GPS points on map.  Then I opened
  * the generated navlog and copied in HTML into a test file.  There is one line in the html that includes the text with
@@ -33,6 +34,12 @@ public class GPS_Intersection
 
     ArrayList<ArrayList<WaypointNode>> getLightlyPopPoints() {return lightlyPopPoints;}
 
+    /**
+     * Stores the polygons provided as fully populated areas.  Given a point, can tell if it is in one of the stored polygons
+     * Also, creates buffer area around each polygon which is defined to be the "lightly populated" area
+     * See above comments for how new polygons were added. First time it is run, it stores them into a file. They are easily accessed from there.
+     * @param pathToPolygons path to where files will be stored for GraphPath
+     */
     public GPS_Intersection(String pathToPolygons) {
         this.pathToPolygons = pathToPolygons;
         File stored = new File(pathToPolygons + "/storedLatAndLonArray.txt");
@@ -248,6 +255,12 @@ public class GPS_Intersection
         }
     }
 
+    /**
+     * Fills provided ArrayList by reading data using the provided scanner
+     * @param pointArray ArrayList to be filled
+     * @param reader Scanner used for reading
+     * @param size amount to read
+     */
     private void fillArrays(ArrayList<ArrayList<WaypointNode>> pointArray, Scanner reader, int size) {
         for (int i = 0; i < size; i++) {
             ArrayList<WaypointNode> nextPointArray = new ArrayList<>();
@@ -259,6 +272,12 @@ public class GPS_Intersection
         }
     }
 
+    /**
+     * Expands the provided base ArrayList of points into new polygons. There will be the same number of polygons as provided from the basePoints.
+     * There will be many more points though. The progression seems to be exponential as corners are rounded using many points.
+     * @param basePoints Base ArrayList of polygons to be expanded
+     * @return Set of polygons that are are buffers of the provided polygons
+     */
     private Polygon[] expandPolygon(ArrayList<ArrayList<WaypointNode>> basePoints) {
         GeometryFactory gf = new GeometryFactory();
         Polygon[] myPolys = new Polygon[basePoints.size()];
@@ -273,11 +292,17 @@ public class GPS_Intersection
         }
         Polygon[] modMyPolys = new Polygon[myPolys.length];
         for(int i = 0; i < myPolys.length; i++) {
-            modMyPolys[i] = (Polygon) BufferOp.bufferOp(myPolys[i], 1.0 / 60); //0.0145 0.008997
+            // there are no units defined for the distance by which to expand the polygon. This factor was chosen by guess and check to try and approximate 1 nautical mile
+            modMyPolys[i] = (Polygon) BufferOp.bufferOp(myPolys[i], 1.0 / 60);
         }
         return modMyPolys;
     }
 
+    /**
+     * Fills the provided newPointArray will expand buffers based on the basePoints
+     * @param basePoints polygons to be expanded
+     * @param newPointArray initially empty ArrayList filled with the buffered areas surrounding the basePoints
+     */
     private void createSurroundingAreas(ArrayList<ArrayList<WaypointNode>> basePoints, ArrayList<ArrayList<WaypointNode>> newPointArray) {
         Polygon[] modMyPolys = expandPolygon(basePoints);
         for (Polygon nextPoly : modMyPolys) {
@@ -289,16 +314,21 @@ public class GPS_Intersection
         }
     }
 
-    public void convertToJTS() {
+    /**
+     * Fills lightlyPopulated polygons with buffered areas surrounding loaded populated areas
+     */
+    private void convertToJTS() {
         lightlyPopPoints = new ArrayList<>(popPoints.size());
         createSurroundingAreas(popPoints, lightlyPopPoints);
     }
 
-    public void printIfIsContained(double testLat, double testLong) {
-        boolean isContained = coordIsContained(testLat, testLong);
-        System.out.println(isContained);
-    }
-
+    /**
+     * Checks to see if the provided gps coordinate is inside any of the polygons stored
+     * Since the lighly populated areas include the populated areas, it checks the inner polygons first then checks the buffered areas
+     * @param testLat the tested latitude
+     * @param testLong the tested longitude
+     * @return array indicating what polygon that point is in and which set of polygons that polygon is in. sentinel -1, -1 indicates that it wasn't found to intersect any of the stored polygons
+     */
     public int[] indexOfContainedCoord(double testLat, double testLong) {
         int indexOfContained = -1;
         int arrayContained = -1;
@@ -321,22 +351,41 @@ public class GPS_Intersection
         return new int[]{indexOfContained, arrayContained};
     }
 
+    /**
+     * Completes all of the pre-computation needed for calculating the shortest path which might be needed later
+     * @param destination home coordinate
+     * @return an instance of GraphPath that contains all of the precomputed data and functionality
+     */
     public GraphPath shortestPath(WaypointNode destination) {
         return new GraphPath(destination, this, pathToPolygons);
     }
 
-    public boolean coordIsContained(double testLat, double testLong) {
+    /**
+     * Returns boolean indicating if the provided test point is inside any of the stored polygons
+     * @param testLat the tested latitude
+     * @param testLong the tested longitude
+     * @return boolean if the tested point is inside any of the provided polygons
+     */
+    boolean coordIsContained(double testLat, double testLong) {
         return indexOfContainedCoord(testLat, testLong)[0] != -1;
     }
 
-    public static void main(String[] args) {
-        GPS_Intersection gi = new GPS_Intersection("/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
-        //gi.printIfIsContained(32 + 40.19/60, -1*(97 + 02.98/60));
-        gi.convertToJTS();
-    }
+    // uncomment for testing
+//    public static void main(String[] args) {
+//        GPS_Intersection gi = new GPS_Intersection("/home/dgries/Desktop/Daniel_Griessler_Internship_Files/Translator_Source_Code/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
+//        //gi.printIfIsContained(32 + 40.19/60, -1*(97 + 02.98/60));
+//        gi.convertToJTS();
+//    }
 
-
-    public static boolean coordinate_is_inside_polygon(
+    /**
+     * Calculates if a provided gps coordinate is inside an ArrayList of gps coordinates which define a polygon
+     * Unedited from source linked at the top in the comments
+     * @param latitude the tested latitude
+     * @param longitude the tested longitude
+     * @param point_array the polygon to be checked
+     * @return if the provided point is inside the provided polygon
+     */
+    private static boolean coordinate_is_inside_polygon(
             double latitude, double longitude,
             ArrayList<WaypointNode> point_array)
     {
@@ -360,7 +409,15 @@ public class GPS_Intersection
         return !(Math.abs(angle) < PI);
     }
 
-    public static double Angle2D(double y1, double x1, double y2, double x2)
+    /**
+     * Utility function for checking if a given coordinate is inside a polygon
+     * @param y1 one of the latitudes
+     * @param x1 one of the longitudes
+     * @param y2 the other latitude
+     * @param x2 the other longitude
+     * @return angle
+     */
+    private static double Angle2D(double y1, double x1, double y2, double x2)
     {
         double dtheta,theta1,theta2;
 

@@ -8,7 +8,8 @@ import antlr4.FMSParser;
 import java.io.IOException;
 import java.util.LinkedList;
 
-/** Parses provided .fms flight plan
+/**
+ * Parses provided .fms flight plan
  * Created by Daniel Griessler Spring 2019
  */
 public class FlightPlanParser {

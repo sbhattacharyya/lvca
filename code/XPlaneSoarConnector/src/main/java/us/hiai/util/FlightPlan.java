@@ -2,6 +2,9 @@ package us.hiai.util;
 
 import java.util.LinkedList;
 
+/**
+ * Contains the relevant parsed information from the original provided .fms flight plan
+ */
 public class FlightPlan {
     char builder;
     int versionNumber;

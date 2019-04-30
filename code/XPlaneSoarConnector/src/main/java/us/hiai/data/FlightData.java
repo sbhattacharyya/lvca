@@ -4,14 +4,15 @@ import org.jsoar.util.events.SoarEvent;
 
 /**
  * Created by icislab on 10/13/2016.
+ * Updated by Daniel Griessler Spring 2019
  */
 public class FlightData implements SoarEvent
 {
-    public int airspeed = 0;
-    public int altitude = 0;
-    public double lat = 0;
-    public double lon = 0;
-    public boolean allEningesOK = true;
+    public int airspeed;
+    public int altitude;
+    public double lat;
+    public double lon;
+    public boolean allEningesOK;
     public boolean wheelBrakesON;
     public boolean airBrakesON;
     public boolean reversersON;
@@ -27,6 +28,7 @@ public class FlightData implements SoarEvent
     {
         this.airspeed = airspeed;
         this.altitude = altitude;
+        this.lat = 0;
         this.lat = lat;
         this.lon = lon;
         this.allEningesOK = allEnginesOK;

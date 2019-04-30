@@ -4,15 +4,11 @@ import org.jsoar.kernel.*;
 import org.jsoar.kernel.events.OutputEvent;
 import org.jsoar.kernel.io.InputBuilder;
 import org.jsoar.kernel.io.InputWme;
-import org.jsoar.kernel.lhs.Condition;
 import org.jsoar.kernel.memory.Wme;
-import org.jsoar.kernel.rhs.Action;
 import org.jsoar.kernel.symbols.Symbol;
 import org.jsoar.kernel.symbols.SymbolFactory;
-import org.jsoar.kernel.tracing.Trace;
 import org.jsoar.util.adaptables.Adaptables;
 import org.jsoar.util.commands.SoarCommands;
-import org.slf4j.Logger;
 import us.hiai.data.FlightData;
 import us.hiai.util.*;
 import us.hiai.util.QuadtreeStructure.CollectDecisions;
@@ -31,6 +27,9 @@ import java.util.concurrent.Future;
 import static us.hiai.xplane.XPlaneConnector.*;
 
 /**
+ * This is a single threaded Drone Controller for simulated flight with XPlane interacting with a Soar agent.
+ * This Drone Controller is activated at the beginning of the flight plan before the plane has reached the first waypoint.
+ * From there, the Drone Controller plays the middle man pulling drefs from XPlane, pushing input into Soar, executing Soar, and catching output from Soar.
  * Created by Daniel Griessler Spring 2019
  */
 public class DroneAgentSingleThread
@@ -49,26 +48,54 @@ public class DroneAgentSingleThread
     private double startAlt;
     private CollectDecisions previousDecisions;
     private Decision selectedPreviousDecision;
+    private SoarFileEditor sfe;
 
+    /**
+     * Provides a pointer to the Graph Path.
+     * The Graph Path stores data on getting the shortest path home
+     * @return pointer to the Graph Path
+     */
     public GraphPath getFlightWeb() {
         return flightWeb;
     }
 
+    /**
+     * Provides a pointer to the data from the latest pull from XPlane
+     * @return a pointer to the latest FlightData
+     */
     public FlightData getData() {
         return data;
     }
 
+    /**
+     * Provides a pointer to the structure containing the closest non-populated node that can be circled while loitering
+     * @return a pointer to the LoiterInput
+     */
     public LoiterInput getClosestLoiterPoint() {
         return closestLoiterPoint;
     }
 
+    /**
+     * Provides a pointer to the structure used to store information about populated areas
+     * @return a pointer to the GPS_Intersection
+     */
     public GPS_Intersection getGpsIntersect() {
         return gpsIntersect;
     }
 
+    /**
+     * Stores the closest node that can be circled when the plane would like to loiter
+     * Contains a boolean value that is accessed by a multi-threaded program doing the calculation for the next closest point.
+     */
     public static class LoiterInput {
         WaypointNode closestLoiterPoint;
         boolean keepCalculating;
+
+        /**
+         * Creates a new loiter point. This is frequently updated by the TrackClosestLoiter object as it is continually looking for a closer point to circle around
+         * As long as keepCalculating is true, the TrackClosestLoiter object will continue to update the closest loiter point by performing calculation
+         * @param closestLoiterPoint Starter loiter point, usually the first waypoint in the flight plan or "home"
+         */
         LoiterInput(WaypointNode closestLoiterPoint) {
             this.closestLoiterPoint = closestLoiterPoint;
             keepCalculating = true;
@@ -78,32 +105,52 @@ public class DroneAgentSingleThread
 
     }
 
-    public void start()
+    /**
+     * Starts the execution of the program. This is not in a constructor because as a method it can be queued into a multi-threaded program and started along with the other defined Soar controllers
+     * @param flightPlanInput Path to the flight plan, a .fms file that XPlane will use for this flight
+     * @param pathToPolygons Path to a folder needed for storage and retrieval in reference to the populated polygons
+     * @param soarFilePath Path to the Soar file that will be executed
+     * @param pathToQuadtrees Path to a folder needed for storage and retrieval in reference to the Soar's agent previous decisions
+     */
+    public void start(String flightPlanInput, String pathToPolygons, String soarFilePath, String pathToQuadtrees)
     {
-        String flightPlanInputFile = "/home/dgriessl/X-Plane 11/Output/FMS plans/DallasOut156.fms";
-        fpp = new FlightPlanParser(flightPlanInputFile);
-        gpsIntersect = new GPS_Intersection("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas");
+        fpp = new FlightPlanParser(flightPlanInput);
+        gpsIntersect = new GPS_Intersection(pathToPolygons);
         flightWeb = gpsIntersect.shortestPath(fpp.getCurrentWaypoint());
         closestLoiterPoint = new LoiterInput(fpp.getCurrentWaypoint());
         data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
         startAlt = XPlaneConnector.getValueFromSim("sim/cockpit2/gauges/indicators/altitude_ft_pilot");
-        previousDecisions = new CollectDecisions("/home/dgriessl/IdeaProjects/lvca/code/XPlaneSoarConnector/src/main/java/us/hiai/util/QuadtreeStructure");
 
         sagt = new Agent();
         sagt.setName("DroneSingle");
         sagt.getPrinter().pushWriter(new OutputStreamWriter(System.out));
-        String pathToSoar = "/home/dgriessl/IdeaProjects/lvca/code/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar".replace("/", File.separator);
+        String pathToSoar = soarFilePath.replace("/", File.separator);
         try {
             SoarCommands.source(sagt.getInterpreter(), pathToSoar);
             System.out.printf("%d Productions Loaded!\n", sagt.getProductions().getProductionCount());
         } catch (SoarException e) {
             e.printStackTrace();
         }
+        // This is used for the human supervised learning
+        int latestNum = 6;
+        for (Production nextProduction : sagt.getProductions().getProductions(ProductionType.USER)) {
+            String[] productionName = nextProduction.getName().split("drone[*]propose[*]operator[*]C");
+            if (productionName.length > 1) {
+                int index = Integer.parseInt(productionName[1].substring(0, productionName[1].indexOf('-')));
+                if (index >= latestNum) {
+                    latestNum = index + 1;
+                }
+            }
+        }
+        previousDecisions = new CollectDecisions(pathToQuadtrees, latestNum);
+        sfe = new SoarFileEditor(pathToSoar, sagt);
+
         sagt.initialize();
         decisionCycle = Adaptables.adapt(sagt, DecisionCycle.class);
         builder = InputBuilder.create(sagt.getInputOutput());
         Symbol blank = null;
         double defaultDouble = 0.0;
+        // input into Soar
         builder.push("flightdata").markWme("fd").
                 add("airspeed", defaultDouble).markWme("as").
                 add("lat", defaultDouble).markWme("lat").
@@ -132,6 +179,7 @@ public class DroneAgentSingleThread
                 add("previousDecisionCommand", "null").markWme("pd_com").
                 add("previousDecisionValue", 0).markWme("pd_val");
 
+        // listens for activity on Soar's output link.
         sagt.getEvents().addListener(OutputEvent.class, soarEvent -> {
             System.out.println("OUT EVENT");
             OutputEvent out = (OutputEvent) soarEvent;
@@ -164,8 +212,11 @@ public class DroneAgentSingleThread
             }
             System.out.println("DONE OUT EVENT");
             if (dref != null && setValue != null && name != null) {
+                // additional commands added in the Soar agent can be caught by adding a case
                 InputWme removeCommandWME;
                 switch(name) {
+                    // turns on the autopilot to match the heading set in XPlane
+                    // also signals to calculate the required heading and continually push it to XPlane
                     case "setAIOn":
                         setValueOnSim(dref, (float)setValue.asInteger().getValue());
                         currentBearing = 0;
@@ -174,6 +225,8 @@ public class DroneAgentSingleThread
                         // ADD SEND DREF TO MAKE SURE NAVIGATION IS BY GPS
                         // There doesn't appear to be one, so make sure this is on.
                         break;
+                    // Calculates the shortest path back to home using logic in GraphPath
+                    // This is started on its thread. While waiting for that to finish, the plane will fly to the latest loiter point
                     case "reverseWaypoints" :
                         closestLoiterPoint.keepCalculating = false;
                         LinkedList<WaypointNode> loiter = new LinkedList<>();
@@ -182,12 +235,14 @@ public class DroneAgentSingleThread
                         ExecutorService executor = Executors.newFixedThreadPool(1);
                         executor.submit(new FindHome(new FindHomeInput(command, new double[]{data.lat, data.lon}, flightWeb, fpp, builder)));
                         break;
+                    // Calculates given the latest bearing and ground speed will the plane be in a populated area or not
                     case "timerChecker":
                         builder.getWme("wPA").update(syms.createString(GeometryLogistics.willBeInPopulated(data.lat, data.lon, currentBearing, data.groundSpeed, gpsIntersect)));
                         builder.getWme("sT").update(syms.createString(Boolean.toString(true)));
                         removeCommandWME = builder.getWme("rC");
                         removeCommandWME.update(command);
                         break;
+                    // Executes a constant descent to the provided altitude by changing the vertical speed of the aircraft
                     case "returnToAltitudeFloor":
                         long setAltitude = setValue.asInteger().getValue();
                         setValueOnSim("sim/cockpit/autopilot/altitude", ((Long)setAltitude).floatValue());
@@ -195,6 +250,7 @@ public class DroneAgentSingleThread
                         // sim/cockpit/autopilot/vertical_velocity = x hundreds of feet per minute
                         returnToAltitudeFloor(command, setAltitude);
                         break;
+                    // Searches around the current position of the aircraft for a previous decision that was made to speed up learning in "learned" areas
                     case "searchDecisions":
                         selectedPreviousDecision = previousDecisions.getClosestDecision(data.lat, data.lon, GeometryLogistics.calculateDistance(data.groundSpeed, 60));
                         System.out.println("TOTAL DISTANCE: " + GeometryLogistics.calculateDistance(data.groundSpeed, 60));
@@ -210,13 +266,14 @@ public class DroneAgentSingleThread
                         removeCommandWME = builder.getWme("rC");
                         removeCommandWME.update(command);
                         break;
+                    // Updates stored previous decisions with the decision made during the execution of this flight
                     case "saveDecision":
                         int timerLength = (int)setValue.asInteger().getValue();
                         WaypointNode decisionPoint = new WaypointNode(data.lat, data.lon);
                         if (selectedPreviousDecision != null) {
                             dref = selectedPreviousDecision.getDecision();
                         }
-                        previousDecisions.addDecision(decisionPoint, dref, timerLength);
+                        sfe.addProduction(previousDecisions.addDecision(decisionPoint, dref, timerLength));
                         removeCommandWME = builder.getWme("rC");
                         removeCommandWME.update(command);
                         break;
@@ -227,6 +284,8 @@ public class DroneAgentSingleThread
         });
 //        sagt.getTrace().setWatchLevel(5);
 //        sagt.getTrace().setEnabled(Trace.Category.BACKTRACING, true);
+
+        // tells Soar to learn chunks
         try {
             sagt.getInterpreter().eval("learn -e");
         } catch (SoarException e) {
@@ -248,8 +307,14 @@ public class DroneAgentSingleThread
         ff1.cancel(true);
     }
 
+    /**
+     * Uses another thread to descend to the provided altitude
+     * @param command Pointer to the command on the output link that will be marked for removal once the descent is complete
+     * @param setAltitude Altitude to descend to, it does assume that you are above that altitude
+     */
     private void returnToAltitudeFloor(Symbol command, long setAltitude) {
         setValueOnSim("sim/cockpit/autopilot/autopilot_state", 18);
+        // these calculations were part of an attempt to descend linearly, this wasn't working so these don't do anything right now
         double currentAlt = data.altitude;
         double totalTimeToDescend = (500-currentAlt) / -2500.0;
         double coefA = 2500.0 / totalTimeToDescend;
@@ -257,6 +322,9 @@ public class DroneAgentSingleThread
         Executors.newSingleThreadExecutor().submit(new VSUpdator(coefA, zeroTime, this, command, setAltitude));
     }
 
+    /**
+     * Executes the descent and indicates success when it has descended to the provided altitude
+     */
     static class VSUpdator implements Runnable {
         double coefA;
         double zeroTime;
@@ -270,6 +338,7 @@ public class DroneAgentSingleThread
             this.command = command;
             this.setAltitude = setAltitude;
         }
+
         @Override
         public void run() {
             while (Math.abs(dst.data.altitude - setAltitude + dst.startAlt) > 1) {
@@ -298,6 +367,9 @@ public class DroneAgentSingleThread
         }
     }
 
+    /**
+     * Used to listen for an 'l' on the terminal which indicates that the Soar agent should take over control of the aircraft since the human has "lost connection"
+     */
     private void flipFlag() {
         Scanner in = new Scanner(System.in);
         while (in.hasNextLine()) {
@@ -310,6 +382,9 @@ public class DroneAgentSingleThread
         }
     }
 
+    /**
+     * All the input required to find the shortest path home while maintaining control of the aircraft
+     */
     static class FindHomeInput {
         Symbol command;
         double[] latAndLon;
@@ -326,6 +401,9 @@ public class DroneAgentSingleThread
 
     }
 
+    /**
+     * Contructs a new flight plan that is the shortest path back home while minimizing flight through populated areas
+     */
     static class FindHome implements Runnable {
 
         FindHomeInput fhi;
@@ -341,9 +419,14 @@ public class DroneAgentSingleThread
         }
     }
 
+    /**
+     * Main loop.  This continues to run until the Soar agent has halted
+     * The main steps: get flight data from XPlane, update input into Soar, run Soar for a decision cycle, repeat
+     */
     private void pushFlightData()
     {
         while (!decisionCycle.isHalted()) {
+            // varying debug information
 //            try {
 //                sagt.getInterpreter().eval("matches drone*propose*usePreviousDecision");
 //            } catch (SoarException e) {
@@ -359,9 +442,12 @@ public class DroneAgentSingleThread
 //                    nextChunk.print(sagt.getPrinter(), true);
 //                }
 //            }
+
+
             data = getFlightData(gpsIntersect);
 
             if (data.lat != 0 || data.lon != 0) {
+                // more debug information
 //                for (int i = 0; i < data.oilPressurePerEngine.length; i++) {
 //                    System.out.printf("\t\tOilPressure%d: %f", i + 1, data.oilPressurePerEngine[i]);
 //                }
@@ -421,16 +507,14 @@ public class DroneAgentSingleThread
                 InputWme soarControl = builder.getWme("tOver");
                 soarControl.update(syms.createString(Boolean.toString(takeOver)));
 
+                // When in control of the aircraft, continually calculates the required bearing to fly
+                // Will circle the last waypoint in the flight plan
                 if (currentBearing != -1) {
                     double distance = GeometryLogistics.calculateDistanceToWaypoint(data.lat, data.lon, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude());
                     if (fpp.currentWaypoint < fpp.flightPlan.waypoints.size() - 1 && distance < GeometryLogistics.NM_METERS / 2.0) {
                         fpp.currentWaypoint++;
                     }
-                    boolean circleCurrentWYPT;
-                    if (fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1)
-                        circleCurrentWYPT = true;
-                    else
-                        circleCurrentWYPT = false;
+                    boolean circleCurrentWYPT = fpp.currentWaypoint == fpp.flightPlan.waypoints.size() - 1;
                     currentBearing = GeometryLogistics.calculateBearing(data.lat, data.lon, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), circleCurrentWYPT, distance);
                     XPlaneConnector.setAutopilotHeading((float)currentBearing);
                 } else {
@@ -441,19 +525,8 @@ public class DroneAgentSingleThread
 
                 try {
                     Thread.sleep(500);
-                } catch (InterruptedException er) {}
+                } catch (InterruptedException ignored) {}
             }
-        }
-    }
-
-    private void printWme(Wme wme)
-    {
-        System.out.println(wme);
-        Iterator<Wme> children = wme.getChildren();
-        while (children.hasNext())
-        {
-            Wme child = children.next();
-            printWme(child);
         }
     }
 }

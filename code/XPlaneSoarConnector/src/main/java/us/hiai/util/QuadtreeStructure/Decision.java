@@ -1,5 +1,8 @@
 package us.hiai.util.QuadtreeStructure;
 
+/**
+ * Stores previous decisions and their values
+ */
 public class Decision {
     String decision;
     Integer value;

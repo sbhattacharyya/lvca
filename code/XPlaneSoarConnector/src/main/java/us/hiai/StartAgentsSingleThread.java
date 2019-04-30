@@ -4,14 +4,20 @@ import us.hiai.agents.DroneAgentSingleThread;
 
 /**
  *
- * Created by mstafford on 10/3/2016.
+ * Created by Daniel Griessler Spring 2019
  */
 public class StartAgentsSingleThread
 {
 
     public static void main(String[] args) {
         DroneAgentSingleThread da = new DroneAgentSingleThread();
-        da.start();
+        String flightPlanLocation = "/home/dgriessl/X-Plane 11/Output/FMS plans/DallasOut156.fms";
+        String runningDir = System.getProperty("user.dir");
+        runningDir = runningDir.substring(0, runningDir.lastIndexOf('/'));
+        String pathToPolygons = runningDir + "/XPlaneSoarConnector/src/main/java/us/hiai/util/populatedAreas";
+        String soarFilePath = runningDir + "/SoarToUPPAALTranslator/src/main/Soar/TestXPlaneDrone.soar";
+        String pathToQuadtrees = runningDir + "/XPlaneSoarConnector/src/main/java/us/hiai/util/QuadtreeStructure";
+        da.start(flightPlanLocation, pathToPolygons, soarFilePath, pathToQuadtrees);
     }
 
 }

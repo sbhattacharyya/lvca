@@ -88,7 +88,7 @@ sp {drone*propose*usePreviousDecision
 
 sp {drone*apply*throwAwayPreviousDecision
     "Disregard the previous null decision"
-    (state <s> ^name droneFlight ^io.input-link <fd> ^operator <o> ^previousDecisionCommand null ^previousDecisionValue <val>)
+    (state <s> ^name droneFlight ^operator <o> ^previousDecisionCommand null ^previousDecisionValue <val>)
     (<o> ^name applyPreviousDecision)
     -->
     (<s> ^acknowledgedCommands searchDecisions -)
@@ -97,9 +97,9 @@ sp {drone*apply*throwAwayPreviousDecision
     (write (crlf) |Ignoring null decision |)
 }
 
-sp {drone*apply*usePreviousDecision
+sp {drone*apply*usePreviousDecisionTimer
     "Apply the previous timer decision"
-    (state <s> ^name droneFlight ^io.input-link <fd> ^operator <o> ^previousDecisionCommand timer ^previousDecisionValue <val>)
+    (state <s> ^name droneFlight ^operator <o> ^previousDecisionCommand timer ^previousDecisionValue <val>)
     (<o> ^name applyPreviousDecision)
     -->
     (<s> ^addressedProblem previousDecision ^maxTimers <val> ^startNewTimer true)
@@ -110,7 +110,8 @@ sp {drone*apply*usePreviousDecision
 
 sp {drone*propose*operator*C2-Lost-Link-Start
     "In lightly populated area, could start just a minute timer and turn around since will pass over or enter a populated area in one minute"
-    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C2-Start)
+    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C2-Start ^io.input-link.flightdata <fd>)
+    (<fd> ^takeOver true ^populated << lightly fully >>)
     -->
     (<s> ^operator <o> +)
     (<o> ^name C2-Start
@@ -120,7 +121,8 @@ sp {drone*propose*operator*C2-Lost-Link-Start
 
 sp {drone*propose*operator*C3-Lost-Link-Start
     "In lightly populated area, could start 8 minute timer and after that turn around since I won't be in a populated area for a while"
-    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C3-Start)
+    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C3-Start ^io.input-link.flightdata <fd>)
+    (<fd> ^takeOver true ^populated << lightly fully >>)
     -->
     (<s> ^operator <o> +)
     (<o> ^name C3-Start
@@ -161,6 +163,53 @@ sp {drone*apply*operator*StartTimerLostLinkLater
     (<s> ^addressedProblem <n> ^addressedProblem <ap> - ^maxTimers <tl> ^maxTimers <mT> - ^startNewTimer true)
     (<s> ^startContingency true -)
     (write (crlf) |FOUND_1 | <n>)
+}
+
+sp {drone*propose*operator*C4-Lost-Link-Start
+    "In non-populated area, continue flying pre-programmed course.  Return to mission altitude/altitude floor after 1 minute"
+    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C4-Start ^io.input-link.flightdata <fd>)
+    (<fd> ^takeOver true ^populated null)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name C4-Start)
+    (write (crlf) |PROPOSE C4!|)
+}
+
+sp {drone*apply*operator*C4-Lost-Link-Start
+    "Maintain Pre-Programmed Course, Return to mission altitude/altitude floor after 1 minute"
+    (state <s> ^name droneFlight ^io.input-link.flightdata <fd> ^startContingency true -^addressedProblem ^operator <o>)
+    (<fd> ^takeOver true ^currentTime <current-Time>)
+    (<o> ^name C4-Start)
+    -->
+    (<s> ^addressedProblem C4-Start ^c4Timer <t> ^startNewTimer true)
+    (<s> ^startContingency true -)
+    (<t> ^targetTime (+ <current-Time> 60))
+    (write (crlf) |Starting C4 Timer!|)
+}
+
+sp {drone*propose*removeC4DoneTimer
+    "Listens for C4's timer being completed"
+    (state <s> ^name droneFlight ^c4Timer <t> ^io.input-link.flightdata <fd>)
+    (<t> ^targetTime <t1>)
+    (<fd> ^currentTime {<time> >= <t1>})
+    -->
+    (<s> ^operator <o>)
+    (<o> ^name stopC4Timer)
+    (write (crlf) |Found C4 timer done.|)
+}
+
+sp {drone*apply*removeC4DoneTimer
+    "Removes C4 timer and sends command to return to altitude floor"
+    (state <s> ^name droneFlight ^io.output-link <out> ^io.input-link.flightdata <fd> ^operator <o> ^c4Timer <t>)
+    (<fd> ^takeOver true)
+    (<o> ^name stopC4Timer)
+    -->
+    (<s> ^c4Timer <t> -)
+    (<out> ^command <com>)
+    (<com> ^dref null
+           ^setValue 500
+           ^name returnToAltitudeFloor)
+    (write (crlf) |C4 Timer done. Sending command to return to altitude floor|)
 }
 
 sp {drone*apply*initializeCurrentTimers
@@ -412,4 +461,26 @@ sp {drone*markPreviousDecision
     (<s> ^acknowledgedCommands searchDecisions)
     (<s> ^previousDecisionCommand <com> ^previousDecisionValue <val>)
     (write (crlf) |Received the closest decision or default C2!|)
+}
+
+sp {drone*propose*operator*C6-Lost-Link-Start
+    "In lightly populated area, should start a 2 minute timer and then turn around"
+    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C6-Start ^io.input-link.flightdata <fd>)
+    (<fd> ^takeOver true ^populated << lightly fully >>)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name C6-Start
+         ^timerLength 2)
+    (write (crlf) |PROPOSE C6!|)
+}
+
+sp {drone*propose*operator*C7-Lost-Link-Start
+    "In lightly populated area, should start a 4 minute timer and then turn around"
+    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete C7-Start ^io.input-link.flightdata <fd>)
+    (<fd> ^takeOver true ^populated << lightly fully >>)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name C7-Start
+         ^timerLength 4)
+    (write (crlf) |PROPOSE C7!|)
 }

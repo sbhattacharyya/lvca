@@ -9,10 +9,26 @@ import java.util.*;
 import us.hiai.util.GeometryLogistics;
 import us.hiai.util.WaypointNode;
 
+/**
+ * Collects together all the previous decisions to be accessed and then saves new decisions to be retrieved during the next execution
+ * Testing and sampling in the beginning has very few saved decisions so a HashMap is adequate with O(N) time to retrieve a close decision when needed
+ * To speed this up, a skip list quad tree can be constructed which is partially outlined in papers online.  This would allow for O(log(N)) access time and insertion
+ * This is preferable for arbitrarily large sets of previous decision points that are at arbitrary locations.
+ * Also, right now, new decisions are created for each point.  Only unique decisions should be stored so the save and retrieve methods can be amended to make it more space efficent for large sets
+ */
 public class CollectDecisions {
     private HashMap<WaypointNode, Decision> previousDecisions;
     private String pathToQuadtree;
-    public CollectDecisions(String pathToQuadtree) {
+    private int latestRuleNum;
+
+    /**
+     * Either creates a file to store new decisions if it doesn't exist, or opens the existing one and reads in the decisions into memory
+     * This has to match the save method's input
+     * @param pathToQuadtree path to where the saved decisions are stored/will be stored
+     * @param latestRuleNum latest contingency number needed for human assisted learning of new contingencies
+     */
+    public CollectDecisions(String pathToQuadtree, int latestRuleNum) {
+        this.latestRuleNum = latestRuleNum;
         this.pathToQuadtree = pathToQuadtree;
         previousDecisions = new HashMap<>();
         File stored = new File(pathToQuadtree + "/storedDecisions.txt");
@@ -51,6 +67,13 @@ public class CollectDecisions {
         }
     }
 
+    /**
+     * Retrieves the closest decision within the provided max distance
+     * @param planeLat the current latitude of the plane
+     * @param planeLon the current longitude of the plane
+     * @param maxDistance the maximum distance that the point can be from the airplane
+     * @return either the closest decision within maxDistance or null indicating there isn't a close enough decision
+     */
     public Decision getClosestDecision(double planeLat, double planeLon, double maxDistance) {
         Decision minDecision = null;
         double minDistance = Double.MAX_VALUE;
@@ -64,11 +87,41 @@ public class CollectDecisions {
         return minDecision;
     }
 
-    public void addDecision(WaypointNode point, String decision, Integer value) {
+    /**
+     * Adds a new decision to the current collection. Every time a new decision is added, the saved decision file is overwritten
+     * Since the agent should only be learning once per flight, this should not be too obstructive
+     * With the current small sample size, this provides no barrier. Given arbitrarily large sets of points, however, this implementation may need to be amended
+     * @param point new WaypointNode where the decision was made
+     * @param decision what decision was made
+     * @param value the value associated with the decision or null indicating there is no value
+     * @return The human-assisted learning new rule for a contingency that might not exist in the Soar agent yet and name of that rule or two null values indicating no new contingency
+     */
+    public String[] addDecision(WaypointNode point, String decision, Integer value) {
         previousDecisions.put(point, new Decision(decision, value));
+        String newRule = null;
+        String newRuleName = null;
+        if (value != null && value > 1 && value < 8) {
+            newRuleName = "C" + latestRuleNum + "-Start";
+            // This construction is based on the construction of C2-Start and C3-Start in the current Soar agent.  Any edits there need to be reflected here.
+            newRule =
+                    "\nsp {drone*propose*operator*C" + latestRuleNum + "-Lost-Link-Start\n" +
+                    "    \"In lightly populated area, should start a " + value + " minute timer and then turn around\"\n" +
+                    "    (state <s> ^name droneFlight ^startContingency true -^contingencyComplete " + newRuleName + " ^io.input-link.flightdata <fd>)\n" +
+                    "    (<fd> ^takeOver true ^populated << lightly fully >>)\n" +
+                    "    -->\n" +
+                    "    (<s> ^operator <o> +)\n" +
+                    "    (<o> ^name " + newRuleName + "\n" +
+                    "         ^timerLength " + value + ")\n" +
+                    "    (write (crlf) |PROPOSE C" + latestRuleNum + "!|)\n" +
+                    "}\n";
+        }
         save();
+        return new String[]{newRule, newRuleName};
     }
 
+    /**
+     * Saves current list of decisions into a file to be retrieved on later executions
+     */
     public void save() {
         File stored = new File(pathToQuadtree + "/storedDecisions.txt");
         try {
