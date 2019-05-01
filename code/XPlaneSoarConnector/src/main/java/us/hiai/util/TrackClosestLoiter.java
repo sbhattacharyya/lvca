@@ -10,8 +10,16 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.*;
 
+/**
+ * Constantly tracks the closest non-populated point that can be used as a loiter point as needed
+ */
 public class TrackClosestLoiter implements Runnable {
 
+    /**
+     * Used to package information about distances
+     * Again, similar to DoubInt and Pair except for the lack of a node and a different compare method
+     * Really should be combined with the other structures
+     */
     static class Distances implements Comparable<Distances> {
         double distanceTo;
         double[] distanceOverPolygons;
@@ -43,8 +51,11 @@ public class TrackClosestLoiter implements Runnable {
     private ArrayList<Entry<Distances, WaypointNode>> insertedPoints = new ArrayList<>();
     private double[] lastCalcLatAndLon;
     private DroneAgentSingleThread dast;
-    // Java is not passing pointers as I thought so the variables are not being shared
-    // Somehow I need to share them or just keep initializing this
+
+    /**
+     * Initializes global variables needed for the threading and sets the first loiter to be the home node to start
+     * @param dast pointer to the DroneAgentSingleThread needed because passing the values themselves weren't being updated as the DroneAgent was running
+     */
     public TrackClosestLoiter(DroneAgentSingleThread dast) {
         this.dast = dast;
         lastCalcLatAndLon = new double[]{dast.getData().lat, dast.getData().lon};
@@ -56,11 +67,17 @@ public class TrackClosestLoiter implements Runnable {
         updateClosestLoiter();
     }
 
+    /**
+     * Updates the closest loiter point stored in the DroneAgentSingleThread
+     */
     private void updateClosestLoiter() {
         dast.getClosestLoiterPoint().getClosestLoiterPoint().setLatitude(loiterPoints.min().getValue().getLatitude());
         dast.getClosestLoiterPoint().getClosestLoiterPoint().setLongitude(loiterPoints.min().getValue().getLongitude());
     }
 
+    /**
+     * Packaged output for DistanceCalculator
+     */
     static class DistancesCalculatorOutput {
         int index;
         Distances distances;
@@ -70,6 +87,10 @@ public class TrackClosestLoiter implements Runnable {
         }
     }
 
+    /**
+     * Calculates the distance information between the plane and each circle-able point
+     * Construction similar to PathFinderPopulated so they can probably be combined with minor modifications
+     */
     static class DistancesCalculator implements Callable<DistancesCalculatorOutput> {
 
         double[] currentLatAndLon;
@@ -83,6 +104,10 @@ public class TrackClosestLoiter implements Runnable {
             this.myIntersect = myIntersect;
         }
 
+        /**
+         * Calculates between the plane and the provided node the total distance, the distance that will pass through lightly populated polygons, and the distance that will pass through fully populated areas
+         * @return the distances and the node
+         */
         @Override
         public DistancesCalculatorOutput call() {
             double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(currentLatAndLon[0], currentLatAndLon[1], inputPoint.getLatitude(), inputPoint.getLongitude());
@@ -92,6 +117,10 @@ public class TrackClosestLoiter implements Runnable {
         }
     }
 
+    /**
+     * While told to keep calculating, it continually spins up a thread pool to find the closest point to loiter around
+     * The goal was to do the calculation every nautical mile but the calculation isn't fast enough as seen by the output
+     */
     @Override
     public void run() {
         while(dast.getClosestLoiterPoint().isKeepCalculating()) {

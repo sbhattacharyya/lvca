@@ -2,6 +2,9 @@ package us.hiai.util;
 
 import java.util.concurrent.Callable;
 
+/**
+ * Used to multi-thread the calculation from the plane's location to each populated node
+ */
 public class PathFinderPopulated implements Callable<GraphPath.DoubInt> {
     private PackedPathFinder input;
 
@@ -9,6 +12,10 @@ public class PathFinderPopulated implements Callable<GraphPath.DoubInt> {
         this.input=ppf;
     }
 
+    /**
+     * Calculates between the plane and the provided node the total distance, the distance that will pass through lightly populated polygons, and the distance that will pass through fully populated areas
+     * @return a DoubInt indicating and each of the distances calculated
+     */
     @Override
     public GraphPath.DoubInt call() {
         double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(input.planeLat, input.planeLon, input.gp.getElements()[input.node].getLat(), input.gp.getElements()[input.node].getLon());

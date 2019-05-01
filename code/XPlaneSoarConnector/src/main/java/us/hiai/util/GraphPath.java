@@ -13,9 +13,13 @@ import java.util.concurrent.*;
 
 /**
  * Created by Daniel Griessler Spring 2019
- *
+ * Precomputes the shortest path from all nodes back to home that are known based on the polygons
+ * At runtime, only has to find the shortest path from plane's current position to any node in the precomputed set.
  */
 public class GraphPath {
+    /**
+     * Used to store each gps coordinate with what polygon that it belongs to
+     */
     public static class Node {
         private WaypointNode point;
         int polygonIndex;
@@ -40,24 +44,36 @@ public class GraphPath {
     private DoubInt[] populatedToHome;
     private HashSet<Integer> hasNonpopulatedPathHome;
 
-    public Node[] getElements() {return elements;}
+    Node[] getElements() {return elements;}
     GPS_Intersection getGpsIntersect() {return gpsIntersect;}
     DoubInt[] getNonPopulatedToHome() {return nonPopulatedToHome;}
-    public DoubInt[] getPopulatedToHome() {return populatedToHome;}
+    DoubInt[] getPopulatedToHome() {return populatedToHome;}
     public HashSet<Integer> getHasNonpopulatedPathHome() {return hasNonpopulatedPathHome;}
 
-    int[] fillElements(int currentIndex, ArrayList<ArrayList<WaypointNode>> pointArray, int polygon) {
-        for (int i = 0; i < pointArray.size(); i++) {
-            int currentSize = pointArray.get(i).size();
-            for (int j = 0; j < currentSize; j++) {
-                elements[currentIndex++] = new Node(pointArray.get(i).get(j), polygon);
+    /**
+     * Fills elements with newest polygon. Elements holds all points together regardless of what polygon they belong to
+     * @param currentIndex current index for filling elements
+     * @param pointArray polygon that is being added
+     * @param polygon latest polygon index that is being added
+     * @return the new current index for elements and the new polygon number
+     */
+    private int[] fillElements(int currentIndex, ArrayList<ArrayList<WaypointNode>> pointArray, int polygon) {
+        for (ArrayList<WaypointNode> waypointNodes : pointArray) {
+            for (WaypointNode waypointNode : waypointNodes) {
+                elements[currentIndex++] = new Node(waypointNode, polygon);
             }
-//            polygonEnd[polygonEndIndex++] = currentIndex - 1;
             polygon++;
         }
-        return new int[]{currentIndex, /*polygonEndIndex,*/ polygon};
+        return new int[]{currentIndex, polygon};
     }
 
+    /**
+     * This will either run or load the values for dijkstra's first trying to find a path home without going through any populated areas and then dijkstra's on all the nodes trying to minimize
+     * flying through populated areas if unavoidable.
+     * @param home gps coordinate where home is. Usually the first gps coordinate in the flight plan
+     * @param gpsIntersect reference to the GPS_Intersection holding all the information about the polygons
+     * @param pathToPolygons path where the files where be stored with these computations or restored
+     */
     GraphPath(WaypointNode home, GPS_Intersection gpsIntersect, String pathToPolygons) {
         this.gpsIntersect = gpsIntersect;
         File stored = new File(pathToPolygons + "/storedGraphPath.txt");
@@ -87,7 +103,8 @@ public class GraphPath {
             int[] currentIndexAndPolygonIndex = fillElements(1, gpsIntersect.getPopPoints(), 0);
             fillElements(currentIndexAndPolygonIndex[0], gpsIntersect.getLightlyPopPoints(), currentIndexAndPolygonIndex[1]);
 
-
+            // every change to the polygons will need to re run this part which will take varying amounts of time depending on the number of nodes
+            // there was no good way to verify the current polygon file matched the last one, so it's assumed you'll delete the old storedGraphPath if you change the polygons so this reruns
             if (createdNewFile) {
                 ArrayList<ArrayList<Pair>> graph = new ArrayList<>();
                 Pair[][] graphMatrix = new Pair[size][size];
@@ -95,6 +112,7 @@ public class GraphPath {
                     graph.add(new ArrayList<>());
                 }
                 double totalTime = System.nanoTime();
+                // can change this structure to be more efficient by using a thread pool
                 LinkedList<Future<PackedArgs>> futures = new LinkedList<>();
                 long startIndex = 0;
                 long iteration = Math.round(elements.length / 5.0);
@@ -159,6 +177,9 @@ public class GraphPath {
         }
     }
 
+    /**
+     * Contains all the information needed to run edgeCreator
+     */
     static class PackedArgs {
         int firstIndex;
         int secondIndex;
@@ -176,6 +197,9 @@ public class GraphPath {
         }
     }
 
+    /**
+     * Creates edges on both the structure needed for dijkstra's that checks for non-populated and populated paths homes
+     */
     static class edgeCreator implements Callable<PackedArgs> {
         PackedArgs input;
         edgeCreator(long firstIndex, long secondIndex, ArrayList<ArrayList<Pair>> myGraph, Pair[][] myGraphMatrix, Node[] myElements, GPS_Intersection myIntersect) {
@@ -201,6 +225,12 @@ public class GraphPath {
     }
 
     private static final double EPSILON = 1;
+
+    /**
+     * A Pair contains the same elements as a DoubInt, but the constructor and comparator is a little different
+     * With some work, you can probably merge the objects Pair and DoubInt
+     * This is the structure used in dijkstra's for the non-populated calculation
+     */
     static class Pair implements Comparable<Pair> {
         int node;
         double distance;
@@ -244,12 +274,19 @@ public class GraphPath {
         }
     }
 
+    /**
+     * Implementation for dijkstra's algorithm while minimizing distance between the points. It doesn't include any edges that pass through a populated area
+     * @param graph adjacency list that defines the edges for each point
+     * @param maxSize defines the max number of nodes
+     * @return an array of DoubInt that describes the distance to the home node and what distance over populated areas it crosses on that path as well along with what node to follow on the minimized path home
+     */
     private DoubInt[] dijkstra(ArrayList<ArrayList<Pair>> graph, int maxSize) {
         DoubInt[] dist = new DoubInt[graph.size()];
         dist[0] = new DoubInt(-2, 0.0);
         for (int i = 1; i < dist.length; i++) {
             dist[i] = new DoubInt(-1, Double.MAX_VALUE);
         }
+        // Efficient data structure drawn from my Data Structures textbook with citation information in the relevant classes
         HeapAdaptablePriorityQueue<Integer,Pair> pq = new HeapAdaptablePriorityQueue<>();
         Entry<Integer, Pair> inserted = pq.insert(0, new Pair(0, 0));
         HashMap<Integer,Entry<Integer, Pair>> insertedPairs = new HashMap<>();
@@ -283,6 +320,10 @@ public class GraphPath {
         return dist;
     }
 
+    /**
+     * A DoubInt contains the same elements as a Pair but has a different set of constructors and compare method. Used as a return for both dijkstra's algorithms
+     * With some work could probably combine DoubInt and Pair
+     */
     static class DoubInt implements Comparable<DoubInt> {
         int backNode;
         double distance;
@@ -321,6 +362,12 @@ public class GraphPath {
         }
     }
 
+    /**
+     * Implementation of dijkstra's algorithm to first minimize distance over populated areas, then minimize distance over lightly populated areas, then minimize distance
+     * @param graphMatrix adjacency matrix since this is a full graph
+     * @param maxSize defines the max number of nodes
+     * @return an array of DoubInt that describes the distance to the home node and what distance over populated areas it crosses on that path as well along with what node to follow on the minimized path home
+     */
     private DoubInt[] dijkstra(Pair[][] graphMatrix, int maxSize) {
         DoubInt[] dist = new DoubInt[graphMatrix.length];
         dist[0] = new DoubInt(-2, 0.0, new double[]{0.0, 0.0});
@@ -370,6 +417,12 @@ public class GraphPath {
         return dist;
     }
 
+    /**
+     * Try and construct a path home from the given start node.
+     * @param directionsHome referenced to construct path
+     * @param startNode index into elements to start backtrace
+     * @return Either the constructed path or null indicating there is no path home from the startNode
+     */
     private LinkedList<WaypointNode> backTrace(DoubInt[] directionsHome, int startNode) {
         LinkedList<WaypointNode> path = new LinkedList<>();
         DoubInt current = directionsHome[startNode];
@@ -384,6 +437,14 @@ public class GraphPath {
         return path;
     }
 
+    /**
+     * Packages up the result of finding the distance between the two gps coordinates and the bearing from the first coordinate to the second
+     * @param lat1 the latitude of the first gps coordinate
+     * @param lon1 the longitude of the first gps coordinate
+     * @param lat2 the latitude of the second gps coordinate
+     * @param lon2 the longitude of the second gps coordinate
+     * @return array composed of the distance between the gps coordinates and the bearing starting from the first node to the second
+     */
     double[] getDistanceAndBearing(double lat1, double lon1, double lat2, double lon2) {
         double distanceToNode = GeometryLogistics.calculateDistanceToWaypoint(lat1, lon1, lat2, lon2);
         double currentBearing = GeometryLogistics.calculateBearing(lat1, lon1, lat2, lon2, false, null);
@@ -429,13 +490,20 @@ public class GraphPath {
 //        return directionsHome;
 //    }
 
+    /**
+     * Multithreaded version of the commented out version above
+     * Finds the best path home first trying to find a path home without passing through a populated area and, if none exist, then finding a path that minimizes the flight over the populated areas
+     * @param planeLat starting plane latitude
+     * @param planeLon starting plane longitude
+     * @return the best flight path home composed of the WaypointNodes that should be flown on the way home
+     */
     public LinkedList<WaypointNode> findPathHome(double planeLat, double planeLon) {
         double startTime = System.nanoTime();
         double minDistanceHome = Double.MAX_VALUE;
         int nodeHome = -1;
         LinkedList<WaypointNode> directionsHome;
 
-        ExecutorService executor = Executors.newFixedThreadPool(4);
+        ExecutorService executor = Executors.newFixedThreadPool(4); // had errors when trying to initialize too many threads at a time.
         Set<Future<DoubInt>> set = new HashSet<>();
 //        System.out.println("Entering find path home calculation");
 

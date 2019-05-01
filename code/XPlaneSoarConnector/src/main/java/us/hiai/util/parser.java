@@ -4,7 +4,7 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 /**
- * Daniel Griessler Sprint 2019
+ * Daniel Griessler Spring 2019
  * Created to parse html input from SkyVector's navlog in order to directly import into GPS_Intersection instructions
  * To add your own: modify input variable in main to include the one line of html from navlog that includes all of the GPS coordinates
  * Note: input can be split into multiple string arrays if java complains that the input constant string is too long.  Make sure the first GPS coordinate
@@ -12,22 +12,27 @@ import java.util.ArrayList;
  */
 public class parser {
 
-    public static ArrayList<String> extractCoords(String[][] inputs) {
+    /**
+     * Extracts the coordinates from the input
+     * @param inputs string inputs which contain coordinates to be extracted
+     * @return a list of the coordinates
+     */
+    private static ArrayList<String> extractCoords(String[][] inputs) {
         int size = 0;
-        for (int i = 0; i < inputs.length; i++) {
-            size += inputs[i].length;
+        for (String[] input : inputs) {
+            size += input.length;
         }
         ArrayList<String> returnList = new ArrayList<>(size);
-        for (int i = 0; i < inputs.length; i++) {
-            for (int j = 0; j < inputs[i].length; j++) {
-                if (inputs[i][j].length() > 1) {
-                    char direction = inputs[i][j].charAt(1);
-                    if (inputs[i][j].charAt(2) == ' ' && (direction == 'N' || direction == 'S' || direction == 'W' || direction == 'E')) {
+        for (String[] input : inputs) {
+            for (int j = 0; j < input.length; j++) {
+                if (input[j].length() > 1) {
+                    char direction = input[j].charAt(1);
+                    if (input[j].charAt(2) == ' ' && (direction == 'N' || direction == 'S' || direction == 'W' || direction == 'E')) {
                         int index = 2;
-                        while (inputs[i][j].charAt(index) != '<') {
+                        while (input[j].charAt(index) != '<') {
                             index++;
                         }
-                        returnList.add(inputs[i][j].substring(1, index));
+                        returnList.add(input[j].substring(1, index));
                     }
                 }
             }
@@ -69,8 +74,8 @@ public class parser {
             }
         }
 
-        for (int i = 0; i < output.length; i++) {
-            System.out.println(output[i]);
+        for (String s : output) {
+            System.out.println(s);
         }
     }
 }

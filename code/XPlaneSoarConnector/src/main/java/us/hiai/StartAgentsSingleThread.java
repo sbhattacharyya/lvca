@@ -3,8 +3,9 @@ package us.hiai;
 import us.hiai.agents.DroneAgentSingleThread;
 
 /**
- *
  * Created by Daniel Griessler Spring 2019
+ * Modification of StartAgents which starts only the DroneAgentSingleThread
+ * The paths to the files are hardcoded right now but they can be accepted as arguments to the program
  */
 public class StartAgentsSingleThread
 {

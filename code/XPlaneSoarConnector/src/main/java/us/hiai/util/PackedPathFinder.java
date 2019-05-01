@@ -1,5 +1,8 @@
 package us.hiai.util;
 
+/**
+ * Packed arguments for the path finder
+ */
 class PackedPathFinder {
     double planeLat;
     double planeLon;

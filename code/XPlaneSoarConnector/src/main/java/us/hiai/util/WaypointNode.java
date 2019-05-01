@@ -46,6 +46,7 @@ public class WaypointNode {
         WaypointNode otherWaypointNode = (WaypointNode)o;
         return Math.abs(this.latitude - otherWaypointNode.latitude) < 0.01 && Math.abs(this.longitude - otherWaypointNode.longitude) < 0.01;
     }
+
     @Override
     public int hashCode() {
         final int h1 = Float.floatToIntBits(latitude);
