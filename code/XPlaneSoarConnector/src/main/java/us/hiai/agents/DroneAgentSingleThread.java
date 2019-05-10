@@ -116,8 +116,8 @@ public class DroneAgentSingleThread
     {
         fpp = new FlightPlanParser(flightPlanInput);
         gpsIntersect = new GPS_Intersection(pathToPolygons);
-        flightWeb = gpsIntersect.shortestPath(fpp.getCurrentWaypoint());
-        closestLoiterPoint = new LoiterInput(fpp.getCurrentWaypoint());
+        flightWeb = gpsIntersect.shortestPath(new WaypointNode(fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()));
+        closestLoiterPoint = new LoiterInput(new WaypointNode(fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude()));
         data = new FlightData(0, 0, fpp.getCurrentWaypoint().getLatitude(), fpp.getCurrentWaypoint().getLongitude(), false, false, false, false, new float[]{0}, 0, 0, 0, 0, 0, 0);
         startAlt = XPlaneConnector.getValueFromSim("sim/cockpit2/gauges/indicators/altitude_ft_pilot");
 

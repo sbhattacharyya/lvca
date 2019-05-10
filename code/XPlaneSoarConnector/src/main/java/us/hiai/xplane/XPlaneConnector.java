@@ -1,13 +1,11 @@
 package us.hiai.xplane;
 
-import gov.nasa.xpc.WaypointOp;
 import gov.nasa.xpc.XPlaneConnect;
 import us.hiai.data.FlightData;
 import us.hiai.util.GPS_Intersection;
 
 import java.io.IOException;
 import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.util.Arrays;
 
 public class XPlaneConnector
