@@ -1,0 +1,32 @@
+Query:
+AV_state_left_bank_1_missionaries.values[0] > 0 --> (AV_state_left_bank_1_cannibals.values[0] <= AV_state_left_bank_1_missionaries.values[0])
+
+Comments:
+This query shows that if there are missionaries on the left bank then the number of cannibals on the left bank is less than or equal to the number of missionaries.
+
+
+Query:
+AV_state_right_bank_2_missionaries.values[0] > 0 --> (AV_state_right_bank_2_cannibals.values[0] <= AV_state_right_bank_2_missionaries.values[0])
+
+Comments:
+This query shows that if there are missionaries on the right bank then the number of cannibals on the right bank is less than or equal to the number of missionaries.
+
+
+Query:
+E<> (AV_state_right_bank_2_missionaries.values[0] == 3 && AV_state_right_bank_2_cannibals.values[0] == 3 && AV_state_1_boat.values[0] == right_bank)
+
+Comments:
+This query shows that the example can get to the end condition with 3 missionaries, 3 cannibals, and the boat on the right side of the bank.  I can also do some that show it halts or includes more detail like how many missionaries and cannibals are on the other side of the bank if need be.
+
+
+Query:
+E<> halt
+
+Comments:
+This confirms that the agent actually will halt.  You will notice halt is false everywhere except in the detect goal success production and only set to true when the conditions of the production are met i.e. when 3 missionaries, 3 cannibals, and the boat are on the right side of the river.
+
+Note:
+The four attribute value pairs, AV_state_right_bank_2_missionaries, AV_state_right_bank_2_cannibals, AV_state_left_bank_1_missionaries, and AV_state_left_bank_1_cannibals all actually have value arrays that are size 3.  There is only ever one value in there which is why these conditions satisy.  I am working on the Uppaal plugin so that it generates the corresponding query correctly.
+
+
+

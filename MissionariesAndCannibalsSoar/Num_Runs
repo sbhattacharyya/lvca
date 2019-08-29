@@ -1,0 +1,31 @@
+22:  monitor*move-boat
+12:  mac*propose*operator*move-boat1c
+10:  apply*move-boat*not-1missionary-1-cannibal
+10:  mac*propose*operator*move-boat2c
+ 8:  mac*propose*operator*move-boat11
+ 8:  mac*propose*operator*move-boat2m
+ 8:  mac*propose*operator*move-boat1m
+ 6:  monitor*state*left
+ 6:  monitor*state*right
+ 3:  chunk*selection*select*failure-evaluation-becomes-reject-preference*t2-6-2
+ 2:  chunk*selection*compare*same-symbolic-evaluations-are-indifferent*OpNoChange*t2-40-2
+ 2:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-64-2
+ 2:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-73-2
+ 2:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-68-2
+ 2:  chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-63-2
+ 2:  chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-92-2
+ 2:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-57-2
+ 2:  chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-37-2
+ 2:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-100-2
+ 2:  chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-40-4
+ 2:  chunk*selection*compare*same-symbolic-evaluations-are-indifferent*OpNoChange*t2-40-3
+ 2:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-86-2
+ 1:  chunk*selection*select*success-evaluation-becomes-best-preference*t2-110-2
+ 1:  chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-17-2
+ 1:  chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-79-2
+ 1:  top-goal*halt*success
+ 1:  mac*apply*initialize
+ 1:  mac*propose*initialize
+ 1:  mac*elaborate*problem-space
+ 1:  mac*detect*state*success
+ 1:  apply*move-boat*1-missionary-1-cannibal*right

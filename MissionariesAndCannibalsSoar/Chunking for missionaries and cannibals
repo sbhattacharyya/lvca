@@ -1,0 +1,592 @@
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*t2-110-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 0 ^cannibals 0)
+    (<l1> ^missionaries 3 ^cannibals 3)
+    (<o1> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-110-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 0 ^cannibals 0)
+    (<l1> ^missionaries 3 ^cannibals 3)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-100-2
+    :chunk
+    (state <s1> ^o-bank left-bank ^boat right-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 0 ^cannibals 2)
+    (<l1> ^missionaries 3 ^cannibals 1)
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-100-1
+    :chunk
+    (state <s1> ^superstate <s2> ^operator <o1> ^evaluation <e1>)
+    (<s2> ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 0 ^cannibals 2)
+    (<l1> ^missionaries 3 ^cannibals 1)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s3> ^superoperator <s4> ^superstate <s5>
+          ^superstate <s6> ^evaluation <e1>)
+    (<s3> ^name missionaries-and-cannibals)
+    (<s4> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s5> ^name mac)
+    (<s6> ^o-bank left-bank ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-92-2
+    :chunk
+    (state <s1> ^o-bank left-bank ^boat right-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 0 ^cannibals 3)
+    (<l1> ^missionaries 3 ^cannibals 0)
+    (<o1> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-92-1
+    :chunk
+    (state <s1> ^superstate <s2> ^operator <o1> ^evaluation <e1>)
+    (<s2> ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 0 ^cannibals 3)
+    (<l1> ^missionaries 3 ^cannibals 0)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s3> ^superoperator <s4> ^superstate <s5>
+          ^superstate <s6> ^evaluation <e1>)
+    (<s3> ^name missionaries-and-cannibals)
+    (<s4> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s5> ^name mac)
+    (<s6> ^o-bank left-bank ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-86-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 0 ^cannibals 1)
+    (<l1> ^missionaries 3 ^cannibals 2)
+    (<o1> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-86-1
+    :chunk
+    (state <s1> ^superstate <s2> ^operator <o1> ^evaluation <e1>)
+    (<s2> ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 0 ^cannibals 1)
+    (<l1> ^missionaries 3 ^cannibals 2)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s3> ^superoperator <s4> ^superstate <s5>
+          ^superstate <s6> ^evaluation <e1>)
+    (<s3> ^name missionaries-and-cannibals)
+    (<s4> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s5> ^name mac)
+    (<s6> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-79-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 0 ^cannibals 2)
+    (<l1> ^missionaries 3 ^cannibals 1)
+    (<o1> ^missionaries 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-79-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^missionaries 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 0 ^cannibals 2)
+    (<l1> ^missionaries 3 ^cannibals 1)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-73-2
+    :chunk
+    (state <s1> ^o-bank left-bank ^boat right-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 2 ^cannibals 2)
+    (<l1> ^missionaries 1 ^cannibals 1)
+    (<o1> ^missionaries 1 ^cannibals 1 ^name move-boat)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-73-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^missionaries 1 ^cannibals 1 ^name move-boat)
+    (<s4> ^name mac)
+    (<s5> ^o-bank left-bank ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 2 ^cannibals 2)
+    (<l1> ^missionaries 1 ^cannibals 1)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-68-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^missionaries 1 ^cannibals 1)
+    (<l1> ^missionaries 2 ^cannibals 2)
+    (<o1> ^missionaries 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-68-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^missionaries 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 1 ^cannibals 1)
+    (<l1> ^missionaries 2 ^cannibals 2)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries 3 ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-64-2
+    :chunk
+    (state <s1> ^o-bank left-bank ^boat right-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^cannibals 1 ^missionaries <m1>)
+    (<l1> ^cannibals 2 ^missionaries <m2>)
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries <m1> ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-64-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank left-bank ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 1 ^missionaries <m1>)
+    (<l1> ^cannibals 2 ^missionaries <m2>)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries <m1> ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-63-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^cannibals 1 ^missionaries <m2>)
+    (<l1> ^cannibals 2 ^missionaries <m1>)
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries <m2> ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-63-1
+    :chunk
+    (state <s1> ^superstate <s2> ^operator <o1> ^evaluation <e1>)
+    (<s2> ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 1 ^missionaries <m2>)
+    (<l1> ^cannibals 2 ^missionaries <m1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s3> ^superoperator <s4> ^superstate <s5>
+          ^superstate <s6> ^evaluation <e1>)
+    (<s3> ^name missionaries-and-cannibals)
+    (<s4> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s5> ^name mac)
+    (<s6> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries <m2> ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*success-evaluation-becomes-best-preference*OpNoChange*t2-57-2
+    :chunk
+    (state <s1> ^o-bank left-bank ^boat right-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^cannibals 2 ^missionaries <m1>)
+    (<l1> ^cannibals 1 ^missionaries <m2>)
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries <m1> ^cannibals 3)
+    -->
+    (<s1> ^operator <o1> >)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-57-1
+    :chunk
+    (state <s1> ^superstate <s2> ^operator <o1> ^evaluation <e1>)
+    (<s2> ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 2 ^missionaries <m1>)
+    (<l1> ^cannibals 1 ^missionaries <m2>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s3> ^superoperator <s4> ^superstate <s5>
+          ^superstate <s6> ^evaluation <e1>)
+    (<s3> ^name missionaries-and-cannibals)
+    (<s4> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s5> ^name mac)
+    (<s6> ^o-bank left-bank ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<e1> ^desired <d1>)
+    (<d1> ^right-bank <r2>)
+    (<r2> ^missionaries <m1> ^cannibals 3)
+    -->
+    (<e1> ^symbolic-value success)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-56-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>
+          ^superstate <s2>)
+    (<r1> ^cannibals 1 ^missionaries <m2>)
+    (<l1> ^cannibals 2 ^missionaries <m1>)
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<s2> ^superstate <s3>)
+    (<s3> ^boat right-bank ^right-bank <r2> ^left-bank <l2>)
+    (<r2> ^missionaries <m2> ^cannibals 2)
+    (<l2> ^missionaries <m1> ^cannibals 1)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-56-1
+    :chunk
+    (state <s1> ^operator <o1> ^superstate <s6> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 1 ^missionaries <m2>)
+    (<l1> ^cannibals 2 ^missionaries <m1>)
+    (<s6> ^superstate <s7>)
+    (<s7> ^superstate <s8>)
+    (<s8> ^boat right-bank ^right-bank <r2> ^left-bank <l2>)
+    (<r2> ^missionaries <m2> ^cannibals 2)
+    (<l2> ^missionaries <m1> ^cannibals 1)
+    (<e1> ^desired <d1>)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-40-4
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^left-bank <l1>
+          ^operator <o1> + ^problem-space <p1> ^right-bank <r1> ^desired <d1>)
+    (<l1> ^missionaries 2 ^cannibals { <c1> > 1 })
+    (<o1> ^missionaries 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<r1> ^missionaries <m1>)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*selection*compare*same-symbolic-evaluations-are-indifferent*OpNoChange*t2-40-3
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^operator <o2> +
+          ^problem-space <p1> ^desired <d1>)
+    (<r1> ^cannibals 1 ^missionaries { <m1> < 2 > 0 })
+    (<l1> ^missionaries 2 ^cannibals { <c1> > 1 })
+    (<o1> ^missionaries 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<o2> ^cannibals 1 ^name move-boat
+          ^{ <a2> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    -->
+    (<s1> ^operator <o1> = <o2>)
+}
+
+sp {chunk*selection*compare*same-symbolic-evaluations-are-indifferent*OpNoChange*t2-40-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^operator <o2> +
+          ^problem-space <p1> ^desired <d1>)
+    (<r1> ^cannibals 1 ^missionaries { <m1> > 0 < 2 })
+    (<l1> ^missionaries 2 ^cannibals { <c1> > 1 })
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<o2> ^missionaries 1 ^name move-boat
+          ^{ <a2> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    -->
+    (<s1> ^operator <o1> = <o2>)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-40-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^missionaries 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^left-bank <l1> ^right-bank <r1>)
+    (<l1> ^missionaries 2 ^cannibals { <c1> > 1 })
+    (<r1> ^missionaries <m1>)
+    (<e1> ^desired <d1>)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-37-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^operator <o1> + ^problem-space <p1> ^left-bank <l1> ^desired <d1>)
+    (<r1> ^cannibals 1 ^missionaries { <m1> < 2 > 0 })
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<l1> ^cannibals <c1>)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-37-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 1 ^missionaries { <m1> < 2 > 0 })
+    (<l1> ^cannibals <c1>)
+    (<e1> ^desired <d1>)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-24-2
+    :chunk
+    (state <s1> ^o-bank left-bank ^boat right-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>
+          ^superstate <s2>)
+    (<r1> ^cannibals 3 ^missionaries <m2>)
+    (<l1> ^cannibals 0 ^missionaries <m1>)
+    (<o1> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    (<s2> ^superstate <s3>)
+    (<s3> ^boat left-bank ^right-bank <r2> ^left-bank <l2>)
+    (<r2> ^missionaries <m2> ^cannibals 1)
+    (<l2> ^missionaries <m1> ^cannibals 2)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-24-1
+    :chunk
+    (state <s1> ^operator <o1> ^superstate <s6> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^cannibals 2 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s4> ^name mac)
+    (<s5> ^o-bank left-bank ^boat right-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 3 ^missionaries <m2>)
+    (<l1> ^cannibals 0 ^missionaries <m1>)
+    (<s6> ^superstate <s7>)
+    (<s7> ^superstate <s8>)
+    (<s8> ^boat left-bank ^right-bank <r2> ^left-bank <l2>)
+    (<r2> ^missionaries <m2> ^cannibals 1)
+    (<l2> ^missionaries <m1> ^cannibals 2)
+    (<e1> ^desired <d1>)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*OpNoChange*t2-17-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^operator <o1> + ^problem-space <p1> ^left-bank <l1> ^desired <d1>)
+    (<r1> ^missionaries 0 ^cannibals 1)
+    (<o1> ^missionaries 1 ^cannibals 1 ^name move-boat)
+    (<p1> ^name missionaries-and-cannibals)
+    (<l1> ^missionaries <m1> ^cannibals <c1>)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-17-1
+    :chunk
+    (state <s1> ^operator <o1> ^evaluation <e1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s2> ^superoperator <s3> ^superstate <s4>
+          ^superstate <s5> ^evaluation <e1>)
+    (<s2> ^name missionaries-and-cannibals)
+    (<s3> ^missionaries 1 ^cannibals 1 ^name move-boat)
+    (<s4> ^name mac)
+    (<s5> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^missionaries 0 ^cannibals 1)
+    (<l1> ^missionaries <m1> ^cannibals <c1>)
+    (<e1> ^desired <d1>)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+sp {chunk*selection*select*failure-evaluation-becomes-reject-preference*t2-6-2
+    :chunk
+    (state <s1> ^o-bank right-bank ^boat left-bank ^name mac ^right-bank <r1>
+          ^left-bank <l1> ^operator <o1> + ^problem-space <p1> ^desired <d1>)
+    (<r1> ^cannibals 0 ^missionaries <m2>)
+    (<l1> ^cannibals 3 ^missionaries <m1>)
+    (<o1> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<p1> ^name missionaries-and-cannibals)
+    -->
+    (<s1> ^operator <o1> -)
+}
+
+sp {chunk*evaluate-operator*elaborate*symbolic-evaluation*from-subgoal*Tie*t2-6-1
+    :chunk
+    (state <s1> ^superstate <s2> ^operator <o1> ^evaluation <e1>)
+    (<s2> ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<r1> ^cannibals 0 ^missionaries <m2>)
+    (<l1> ^cannibals 3 ^missionaries <m1>)
+    (<o1> -^default-desired-copy yes ^name evaluate-operator
+          ^superproblem-space <s3> ^superoperator <s4> ^superstate <s5>
+          ^superstate <s6> ^evaluation <e1>)
+    (<s3> ^name missionaries-and-cannibals)
+    (<s4> ^cannibals 1 ^name move-boat
+          ^{ <a1> << missionaries cannibals >> <> duplicate-of } 0)
+    (<s5> ^name mac)
+    (<s6> ^o-bank right-bank ^boat left-bank ^right-bank <r1> ^left-bank <l1>)
+    (<e1> ^desired <d1>)
+    -->
+    (<e1> ^symbolic-value failure)
+}
+
+
+

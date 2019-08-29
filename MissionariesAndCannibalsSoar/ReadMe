@@ -1,0 +1,24 @@
+This folder contains all of the Soar source code for the missionaries and cannibals problem.
+
+Chunking for missionaries and cannibals.txt
+	All chunks for missioaries and cannibals example
+
+Collection of Rules.txt
+	All rules needed for learned missionaries and cannibals example
+
+Missionaries and Cannibal and Default Productions.txt
+	All rules for missionaries and cannibals example (without chunks)
+
+MissionariesAndCannibalsEditedList.soar
+	Edited list of rules that are used in the translator. Excludes output productions which aren't implemented in translator
+
+Missionaries_And_Cannibals_Planning_Agent
+	Missionaries and Cannibals Source Files
+
+Num_Runs.txt
+	Output from Soar about the number of runs each production had when learned Soar agent was run:
+
+QueriesMandC.txt
+	List of queries used to verify missionaries and cannibals example
+	
+	
